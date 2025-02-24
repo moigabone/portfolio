@@ -6,9 +6,9 @@ import * as THREE from 'three';
 
 export const Experience = () => {
   const { camera } = useThree();
-  const targetPosition = useRef([0, 0, 0]);
-  const targetCameraPosition = useRef(new THREE.Vector3(0, 2.8, 5));
-  const [lastMoveTime, setLastMoveTime] = useState(0);
+  const targetPosition = useRef([0, 0, 0]); // Position cible que la caméra regarde
+  const targetCameraPosition = useRef(new THREE.Vector3(0, 2.8, 5)); // Position cible de la caméra
+  const [lastMoveTime, setLastMoveTime] = useState(0); // Temps du dernier mouvement de la caméra
 
   // Limites verticales pour la caméra
   const minY = -42; // Limite inférieure
@@ -21,13 +21,13 @@ export const Experience = () => {
     const handleWheel = (event) => {
       const currentTime = Date.now();
       if (currentTime - lastMoveTime < 2000) {
-        // Ignorer l'événement si moins de 2 secondes se sont écoulées
+        // Ignorer l'événement si moins de 2 secondes se sont écoulées depuis le dernier mouvement
         return;
       }
 
-      const deltaY = -event.deltaY * 0.21;
-      const newCameraY = targetCameraPosition.current.y + deltaY;
-      const newTargetY = targetPosition.current[1] + deltaY;
+      const deltaY = -event.deltaY * 0.21; // Calcul du déplacement vertical
+      const newCameraY = targetCameraPosition.current.y + deltaY; // Nouvelle position verticale de la caméra
+      const newTargetY = targetPosition.current[1] + deltaY; // Nouvelle position verticale de la cible
 
       // Appliquer les limites
       if (newCameraY >= minY && newCameraY <= maxY) {
@@ -46,19 +46,19 @@ export const Experience = () => {
 
   // Met à jour la position de la caméra avec interpolation douce
   useFrame(() => {
-    camera.position.lerp(targetCameraPosition.current, 0.1); // Ajustez le facteur pour plus ou moins de douceur
-    camera.lookAt(...targetPosition.current);
+    camera.position.lerp(targetCameraPosition.current, 0.1); // Interpolation douce vers la position cible
+    camera.lookAt(...targetPosition.current); // Oriente la caméra vers la cible
   });
 
   return (
     <>
-      <ambientLight intensity={2} />
+      <ambientLight intensity={2} /> {/* Lumière ambiante pour éclairer la scène */}
       <OrbitControls
         enableZoom={false}
         enableRotate={true}
         target={targetPosition.current} // Définit la cible des contrôles orbitaux
       />
-      <Office />
+      <Office /> {/* Composant représentant le bureau */}
     </>
   );
 };
