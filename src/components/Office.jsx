@@ -1,11 +1,13 @@
 import React, { useRef } from 'react';
 import { useGLTF } from '@react-three/drei';
+import { useThree } from '@react-three/fiber';
 
 export const FLOOR_HEIGHT = 10; // Hauteur d'un étage
 export const NB_FLOORS = 3; // Nombre d'étages
 
 export function Office(props) {
   const { nodes, materials } = useGLTF('./models/appart.glb'); // Chargement du modèle GLTF
+  const { size } = useThree();
   const groupRefs = {
     classroom: useRef(),
     office: useRef(),
@@ -18,9 +20,9 @@ export function Office(props) {
     ));
 
   const groupData = [
-    { ref: groupRefs.office, position: [1, -42.7, -1.7], rotation: [0, 5.5, 0], keyPrefix: 'Cube032' },
-    { ref: groupRefs.classroom, position: [1.5, -20.4, -2], rotation: [Math.PI / 2, 0, 0.8], keyPrefix: 'Cube006' },
-    { ref: groupRefs.main, position: [0.3, -0.1, -2.2], rotation: [0, 5.48, 0], keyPrefix: 'Cube047' },
+    { ref: groupRefs.office, position: [1, -42.4 * (size.height / 500), -1.7], rotation: [0, 5.5, 0], keyPrefix: 'Cube032' },
+    { ref: groupRefs.classroom, position: [1.5, -20.7 * (size.height / 500), -2], rotation: [Math.PI / 2, 0, 0.8], keyPrefix: 'Cube006' },
+    { ref: groupRefs.main, position: [0.3, -0.1 * (size.height / 500), -2.2], rotation: [0, 5.48, 0], keyPrefix: 'Cube047' },
   ];
 
   return (

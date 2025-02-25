@@ -5,14 +5,14 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from 'three';
 
 export const Experience = () => {
-  const { camera } = useThree();
+  const { camera, size } = useThree();
   const targetPosition = useRef([0, 0, 0]); // Position cible que la caméra regarde
-  const targetCameraPosition = useRef(new THREE.Vector3(0, 2.8, 5)); // Position cible de la caméra
+  const targetCameraPosition = useRef(new THREE.Vector3(0, 2.5, 5)); // Position cible de la caméra
   const [lastMoveTime, setLastMoveTime] = useState(0); // Temps du dernier mouvement de la caméra
 
   // Limites verticales pour la caméra
-  const minY = -42; // Limite inférieure
-  const maxY = 5; // Limite supérieure
+  const minY = -42* (size.height / 500); // Limite inférieure
+  const maxY = 5* (size.height / 500); // Limite supérieure
 
   useEffect(() => {
     // Position initiale de la caméra
@@ -25,7 +25,7 @@ export const Experience = () => {
         return;
       }
 
-      const deltaY = -event.deltaY * 0.21; // Calcul du déplacement vertical
+      const deltaY = -event.deltaY * 0.21 * (size.height / 500); // Ajustement basé sur la hauteur de la fenêtre
       const newCameraY = targetCameraPosition.current.y + deltaY; // Nouvelle position verticale de la caméra
       const newTargetY = targetPosition.current[1] + deltaY; // Nouvelle position verticale de la cible
 
@@ -42,7 +42,7 @@ export const Experience = () => {
     return () => {
       window.removeEventListener('wheel', handleWheel);
     };
-  }, [camera]);
+  }, [camera, size]);
 
   // Met à jour la position de la caméra avec interpolation douce
   useFrame(() => {
