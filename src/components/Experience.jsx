@@ -9,14 +9,13 @@ export const Experience = () => {
   const targetPosition = useRef([0, 0, 0]); // Position cible que la caméra regarde
   const targetCameraPosition = useRef(new THREE.Vector3(0, 2.5, 5)); // Position cible de la caméra
   const [lastMoveTime, setLastMoveTime] = useState(0); // Temps du dernier mouvement de la caméra
-
-  // Limites verticales pour la caméra
-  const minY = -42* (size.height / 500); // Limite inférieure
-  const maxY = 5* (size.height / 500); // Limite supérieure
+  //const [floorNumber, setFloorNumber] = useState(0);
 
   useEffect(() => {
     // Position initiale de la caméra
     camera.position.copy(targetCameraPosition.current);
+
+    let floorNumber = 0;
 
     const handleWheel = (event) => {
       const currentTime = Date.now();
@@ -25,16 +24,24 @@ export const Experience = () => {
         return;
       }
 
-      const deltaY = -event.deltaY * 0.21 * (size.height / 500); // Ajustement basé sur la hauteur de la fenêtre
+      console.log('deltaY : ', event.deltaY)
+
+      const floorDelta = (event.deltaY>0?-1:1);
+
+      let deltaY = floorDelta * 132 * 0.159 * (size.height / 500); // Ajustement basé sur la hauteur de la fenêtre
       const newCameraY = targetCameraPosition.current.y + deltaY; // Nouvelle position verticale de la caméra
       const newTargetY = targetPosition.current[1] + deltaY; // Nouvelle position verticale de la cible
 
-      // Appliquer les limites
-      if (newCameraY >= minY && newCameraY <= maxY) {
-        targetCameraPosition.current.y = newCameraY;
-        targetPosition.current[1] = newTargetY;
-        setLastMoveTime(currentTime); // Mettre à jour le temps du dernier mouvement
+      // Check des limites
+      if (floorNumber+floorDelta > 0 || floorNumber+floorDelta < -2) {
+        return;
       }
+
+      targetCameraPosition.current.y = newCameraY;
+      targetPosition.current[1] = newTargetY;
+      setLastMoveTime(currentTime);
+      floorNumber = (floorNumber+(event.deltaY>0?-1:1)) // Si le deltaY est positif on décend d'un étage
+      console.log(floorNumber)
     };
 
     window.addEventListener('wheel', handleWheel);
