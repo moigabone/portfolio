@@ -23,51 +23,44 @@ export default function Overlay() {
   const [opacityLast, setOpacityLast] = useState(1)
 
   useFrame(() => {
-    setOpacityFirst(1 - scroll.range(0, 1 / 3))
-    setOpacitySecond(scroll.curve(1 / 3, 1 / 3))
-    setOpacityLast(scroll.range(2 / 3, 1 / 3))
+    setOpacityFirst(1 - scroll.range(0, 0.2))
+    setOpacitySecond(scroll.curve(0.2, 0.5))
+    setOpacityLast(scroll.range(0.5, 0.6))
   })
 
   return (
     <Scroll html>
       <div className="w-screen">
         <Section opacity={opacityFirst}>
-          <h1 className="font-semibold font-serif text-2xl">Hello, I'm Wawa Sensei</h1>
-          <p className="text-gray-500">Welcome to my beautiful portfolio</p>
-          <p className="mt-3">I know:</p>
+          <h1 className="font-semibold font-serif text-2xl">Hello, je suis Gabin</h1>
+          <p className="text-gray-500">--------------</p>
+          <p className="mt-3">--------------</p>
           <ul className="leading-9">
-            <li>🧑‍💻 How to code</li>
-            <li>🧑‍🏫 How to learn</li>
-            <li>📦 How to deliver</li>
+            <li>--------------</li>
+            <li>--------------</li>
+            <li>--------------</li>
           </ul>
           <p className="animate-bounce mt-6">↓</p>
         </Section>
 
-        <Section right opacity={opacitySecond}>
-          <h1 className="font-semibold font-serif text-2xl">Here are my skillsets 🔥</h1>
-          <p className="text-gray-500">PS: I never test</p>
-          <p className="mt-3 font-semibold">Frontend 🚀</p>
+        <Section opacity={opacitySecond}>
+          <h1 className="font-semibold font-serif text-2xl">-------------- 🔥</h1>
+          <p className="text-gray-500">--------------</p>
+          <p className="mt-3 font-semibold">--------------</p>
           <ul className="leading-9">
-            <li>ReactJS</li>
-            <li>React Native</li>
-            <li>VueJS</li>
-            <li>Tailwind</li>
-          </ul>
-          <p className="mt-3 font-semibold">Backend 🔬</p>
-          <ul className="leading-9">
-            <li>NodeJS</li>
-            <li>tRPC</li>
-            <li>NestJS</li>
-            <li>PostgreSQL</li>
+            <li>--------------</li>
+            <li>--------------</li>
+            <li>--------------</li>
+            <li>--------------</li>
           </ul>
           <p className="animate-bounce mt-6">↓</p>
         </Section>
 
         <Section opacity={opacityLast}>
-          <h1 className="font-semibold font-serif text-2xl">🤙 Call me maybe?</h1>
-          <p className="text-gray-500">I'm very expensive but you won't regret it</p>
+          <h1 className="font-semibold font-serif text-2xl">--------------</h1>
+          <p className="text-gray-500">--------------</p>
           <p className="mt-6 p-3 bg-slate-200 rounded-lg">
-            📞 <a href="tel:(+42) 4242-4242-424242">(+42) 4242-4242-424242</a>
+            📞 <a href="tel:(+42) 4242-4242-424242">--------------</a>
           </p>
         </Section>
       </div>

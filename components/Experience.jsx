@@ -22,7 +22,7 @@ export default function Experience() {
           shadow-camera-bottom={-10}
         />
         <OrbitControls enableZoom={false} />
-        <ScrollControls pages={3} damping={0.1}>
+        <ScrollControls pages={3} damping={0.01}>
           <Overlay />
           <Apartment />
         </ScrollControls>

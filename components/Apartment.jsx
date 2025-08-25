@@ -4,8 +4,8 @@ import { useGLTF, useScroll } from "@react-three/drei"
 import { useFrame } from "@react-three/fiber"
 import gsap from "gsap"
 
-export const FLOOR_HEIGHT = 2.3
-export const NB_FLOORS = 3
+export const FLOOR_HEIGHTS = [2.3, 2.8, 2.0]  // array of custom heights
+export const NB_FLOORS = FLOOR_HEIGHTS.length
 
 export default function Apartment(props) {
   const group = useRef()
@@ -29,13 +29,22 @@ export default function Apartment(props) {
   })
 
   useLayoutEffect(() => {
-    tl.current = gsap.timeline()
-    tl.current.to(group.current.position, { duration: 3, y: -FLOOR_HEIGHT * (NB_FLOORS - 1) }, 0)
-    tl.current.to(group.current.rotation, { duration: 1.5, y: Math.PI / 6 }, 0)
-    tl.current.to(group.current.rotation, { duration: 1.5, y: -Math.PI / 6 }, 1.5)
-    tl.current.to(group.current.position, { duration: 1.5, x: -1, z: 2 }, 0)
-    tl.current.to(group.current.position, { duration: 1.5, x: 1, z: 2 }, 1.5)
-  }, [])
+  tl.current = gsap.timeline()
+
+  let totalY = 0
+  FLOOR_HEIGHTS.forEach((h, i) => {
+    totalY -= h
+    tl.current.to(group.current.position, {
+      duration: 1,     // duration for this step
+      y: totalY
+    }, i)              // "i" places the animation at step i in the timeline
+  })
+
+  // Extra X/Z movement if you want
+  tl.current.to(group.current.position, { duration: 1.5, x: -1, z: 2 }, 0)
+  tl.current.to(group.current.position, { duration: 1.5, x: 1, z: 4 }, 1.5)
+}, [])
+
 
   return (
     <>
@@ -43,7 +52,7 @@ export default function Apartment(props) {
         <planeGeometry args={[20, 20]} />
         <shadowMaterial transparent opacity={0.3} />
       </mesh>
-      <group ref={group} {...props} position={[0.5, -1, -1]} rotation={[0, -Math.PI / 3, 0]}>
+      <group ref={group} {...props} position={[0.5, -0.4, -1]} rotation={[0, -Math.PI / 3, 0]}>
         <primitive object={scene} />
       </group>
     </>
