@@ -1,7 +1,8 @@
-import { profile, skills, projects, contact } from "@/content/portfolio"
+import { profile, projects, education, work, contact } from "@/content/portfolio"
 
 // Contenu de chaque "page" du scroll, partagé entre la version 3D et la version statique.
-// `right` place la carte à droite (le modèle 3D se décale alors à gauche).
+// `room` : pièce du modèle 3D sur laquelle la caméra zoome (null = vue d'ensemble).
+// `right` place la carte à droite (la pièce est alors cadrée à gauche).
 
 const ScrollHint = () => (
   <p className="mt-6 animate-bounce text-gray-400" aria-hidden="true">
@@ -9,13 +10,24 @@ const ScrollHint = () => (
   </p>
 )
 
+const Tags = ({ items }) => (
+  <ul className="mt-2 flex flex-wrap gap-2">
+    {items.map((item) => (
+      <li key={item} className="rounded-full bg-slate-100 px-3 py-1 text-sm">
+        {item}
+      </li>
+    ))}
+  </ul>
+)
+
 export const SECTIONS = [
   {
     id: "intro",
+    room: null,
     right: false,
     content: (
       <>
-        <h1 className="font-serif text-3xl font-semibold">Hello, je suis {profile.name}</h1>
+        <h1 className="font-serif text-3xl font-semibold">Hello, je suis {profile.firstName}</h1>
         <p className="mt-1 text-gray-500">{profile.role}</p>
         <p className="mt-4">{profile.tagline}</p>
         <ul className="mt-3 space-y-2">
@@ -28,47 +40,68 @@ export const SECTIONS = [
     ),
   },
   {
-    id: "competences",
-    right: true,
-    content: (
-      <>
-        <h2 className="font-serif text-2xl font-semibold">Mes compétences 🔥</h2>
-        {skills.map((group) => (
-          <div key={group.title}>
-            <p className="mt-4 font-semibold">{group.title}</p>
-            <ul className="mt-2 flex flex-wrap gap-2">
-              {group.items.map((item) => (
-                <li key={item} className="rounded-full bg-slate-100 px-3 py-1 text-sm">
-                  {item}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-        <ScrollHint />
-      </>
-    ),
-  },
-  {
     id: "projets",
+    room: "chambre",
     right: false,
     content: (
       <>
-        <h2 className="font-serif text-2xl font-semibold">Projets 🛠️</h2>
-        <ul className="mt-4 space-y-4">
-          {projects.map((p) => (
+        <h2 className="font-serif text-2xl font-semibold">{projects.title}</h2>
+        <p className="mt-1 text-gray-500">{projects.subtitle}</p>
+        <ul className="mt-4 space-y-3">
+          {projects.items.map((p) => (
             <li key={p.title}>
               <a
                 href={p.url}
                 target="_blank"
                 rel="noreferrer"
-                className="block rounded-xl border border-slate-200 p-4 transition hover:border-slate-400 hover:bg-slate-50"
+                className="block rounded-xl border border-slate-200 p-3 transition hover:border-slate-400 hover:bg-slate-50"
               >
                 <p className="font-semibold">{p.title} ↗</p>
                 <p className="text-sm text-gray-500">{p.description}</p>
-                <p className="mt-2 text-xs text-gray-400">{p.tags.join(" · ")}</p>
+                <p className="mt-1 text-xs text-gray-400">{p.tags.join(" · ")}</p>
               </a>
             </li>
+          ))}
+        </ul>
+      </>
+    ),
+  },
+  {
+    id: "formation",
+    room: "classe",
+    right: true,
+    content: (
+      <>
+        <h2 className="font-serif text-2xl font-semibold">{education.title}</h2>
+        <p className="mt-1 text-gray-500">{education.subtitle}</p>
+        <ol className="mt-4 space-y-4 border-l-2 border-slate-200 pl-4">
+          {education.items.map((e) => (
+            <li key={e.title}>
+              <p className="text-xs uppercase tracking-wide text-gray-400">{e.period}</p>
+              <p className="font-semibold">{e.title}</p>
+              <p className="text-sm text-gray-500">{e.detail}</p>
+            </li>
+          ))}
+        </ol>
+        <p className="mt-5 font-semibold">Compétences</p>
+        <Tags items={education.skills} />
+      </>
+    ),
+  },
+  {
+    id: "alternance",
+    room: "bureau",
+    right: false,
+    content: (
+      <>
+        <h2 className="font-serif text-2xl font-semibold">{work.title}</h2>
+        <p className="mt-1 text-gray-500">{work.subtitle}</p>
+        <p className="mt-4 font-semibold">
+          {work.role} — {work.company}
+        </p>
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
+          {work.missions.map((m) => (
+            <li key={m}>{m}</li>
           ))}
         </ul>
         <ScrollHint />
@@ -77,6 +110,7 @@ export const SECTIONS = [
   },
   {
     id: "contact",
+    room: null,
     right: true,
     content: (
       <>
@@ -112,7 +146,7 @@ export function Section({ right, children, ref, style }) {
       className={`flex h-screen flex-col justify-end p-4 md:justify-center md:p-10 ${right ? "md:items-end" : "md:items-start"}`}
     >
       <div className="w-full md:w-1/2 md:max-w-md">
-        <div className="rounded-2xl bg-white/90 px-6 py-8 shadow-lg backdrop-blur md:px-8 md:py-12">
+        <div className="rounded-2xl bg-white/90 px-6 py-6 shadow-lg backdrop-blur md:px-8 md:py-10">
           {children}
         </div>
       </div>
