@@ -1,30 +1,44 @@
-# New conversation
+# Portfolio 3D
 
-*Automatically synced with your [v0.app](https://v0.app) deployments*
+Portfolio one-page en 3D : un modèle d'appartement se déplace au fil du scroll pendant que des cartes de texte (intro, compétences, projets, contact) apparaissent par-dessus.
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/moigabone-6197s-projects/v0-new-conversation)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.app-black?style=for-the-badge)](https://v0.app/chat/projects/uWRmNyTZIAt)
+**Stack** : Next.js (App Router) · React Three Fiber / Drei · GSAP · Tailwind CSS
 
-## Overview
+## Démarrer
 
-This repository will stay in sync with your deployed chats on [v0.app](https://v0.app).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.app](https://v0.app).
+Prérequis : Node.js 20+ et pnpm.
 
-## Deployment
+```bash
+pnpm install
+pnpm dev        # http://localhost:3000
+pnpm build      # build de production
+```
 
-Your project is live at:
+## Modifier le contenu
 
-**[https://vercel.com/moigabone-6197s-projects/v0-new-conversation](https://vercel.com/moigabone-6197s-projects/v0-new-conversation)**
+Tout le texte du site se trouve dans [`content/portfolio.js`](content/portfolio.js) : profil, compétences, projets, liens de contact, titre et description SEO. Ajouter un projet ou une compétence se fait uniquement dans ce fichier.
 
-## Build your app
+## Structure
 
-Continue building your app on:
+| Fichier | Rôle |
+| --- | --- |
+| `components/Experience.jsx` | Canvas 3D, lumières, scroll ; bascule sur une version statique sans WebGL |
+| `components/Apartment.jsx` | Modèle 3D et timeline GSAP pilotée par le scroll |
+| `components/Overlay.jsx` | Fondu des cartes selon la position du scroll |
+| `components/Sections.jsx` | Contenu et mise en page des cartes (une section = une page de scroll) |
+| `components/Loader.jsx` | Écran de chargement du modèle |
+| `public/models/appart.glb` | Modèle 3D (compressé avec meshopt) |
 
-**[https://v0.app/chat/projects/uWRmNyTZIAt](https://v0.app/chat/projects/uWRmNyTZIAt)**
+Ajouter une section dans `SECTIONS` ajoute automatiquement une page de scroll et une étape d'animation du modèle.
 
-## How It Works
+## Modèle 3D
 
-1. Create and modify your project using [v0.app](https://v0.app)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+Après un export depuis Blender, recompresser le modèle :
+
+```bash
+npx @gltf-transform/cli optimize export.glb public/models/appart.glb --compress meshopt --texture-compress webp --simplify false
+```
+
+## Déploiement
+
+Le site est déployé sur Vercel à chaque push sur `main`.
