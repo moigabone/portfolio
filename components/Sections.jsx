@@ -78,7 +78,15 @@ export const SECTIONS = [
         <p className="mt-4 font-semibold">En dehors du code</p>
         <ul className="mt-2 space-y-1 text-sm">
           {projects.hobbies.map((h) => (
-            <li key={h}>{h}</li>
+            <li key={h.label}>
+              {h.href ? (
+                <a href={h.href} target="_blank" rel="noreferrer" className="underline decoration-slate-300 underline-offset-2 hover:decoration-slate-600">
+                  {h.label} ↗
+                </a>
+              ) : (
+                h.label
+              )}
+            </li>
           ))}
         </ul>
       </>
@@ -164,12 +172,14 @@ export const SECTIONS = [
 
 export const NB_SECTIONS = SECTIONS.length
 
+// h-dvh et non h-screen : sur mobile, 100vh ignore la barre d'adresse et chaque section dépasserait
+// d'une page de scroll, au point de rendre la dernière inaccessible
 export function Section({ right, children, ref, style }) {
   return (
     <section
       ref={ref}
       style={style}
-      className={`flex h-screen flex-col justify-end p-4 md:justify-center md:p-10 ${right ? "md:items-end" : "md:items-start"}`}
+      className={`flex h-dvh flex-col justify-end p-4 md:justify-center md:p-10 ${right ? "md:items-end" : "md:items-start"}`}
     >
       <div className="w-full md:w-1/2 md:max-w-md">
         <div className="rounded-2xl bg-white/90 px-5 py-5 text-sm shadow-lg backdrop-blur md:px-8 md:py-10 md:text-base">

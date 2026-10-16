@@ -26,7 +26,13 @@ export const projects = {
     },
   ],
   ideas: ["App de sport", "App de veille", "Second cerveau"],
-  hobbies: ["🎬 Montage vidéo (edits de voyages sur TikTok)", "🎮 Jeux vidéo", "👕 Mode", "🤖 IA & veille tech", "🎧 Podcast Underscore_"],
+  hobbies: [
+    { label: "🎬 Montage vidéo : mes edits de voyages sur TikTok", href: "https://www.tiktok.com/@_gab11_" },
+    { label: "🎮 Jeux vidéo" },
+    { label: "👕 Mode" },
+    { label: "🤖 IA & veille tech" },
+    { label: "🎧 Podcast Underscore_" },
+  ],
 }
 
 // La salle de classe : formation
@@ -83,6 +89,7 @@ export const contact = {
     { label: "Email", value: "gabin.clv@gmail.com", href: "mailto:gabin.clv@gmail.com" },
     { label: "LinkedIn", value: "Gabin Clavier", href: "https://www.linkedin.com/in/gabin-clavier-636253275/" },
     { label: "GitHub", value: "moigabone", href: "https://github.com/moigabone" },
+    { label: "TikTok", value: "@_gab11_", href: "https://www.tiktok.com/@_gab11_" },
   ],
 }
 
