@@ -18,13 +18,9 @@ const poppins = Poppins({
   variable: "--font-poppins",
 })
 
-// URL de production fournie par Vercel, utilisée pour les liens absolus des images de partage
-const siteUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
-  ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-  : "http://localhost:3000"
-
 export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
+  // Utilisée pour les liens absolus des images de partage
+  metadataBase: new URL(site.url),
   title: site.title,
   description: site.description,
   openGraph: {

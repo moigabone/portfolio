@@ -11,7 +11,8 @@ Prérequis : Node.js 20+ et pnpm.
 ```bash
 pnpm install
 pnpm dev        # http://localhost:3000
-pnpm build      # build de production
+pnpm build      # génère le site statique dans out/
+pnpm preview    # sert out/ en local pour vérifier le build
 ```
 
 ## Modifier le contenu
@@ -42,4 +43,13 @@ npx @gltf-transform/cli meshopt tmp.glb public/models/appart.glb
 
 ## Déploiement
 
-Le site est déployé sur Vercel à chaque push sur `main`.
+Site 100 % statique (`output: "export"`), hébergé sur Cloudflare Pages ([gabin-clavier.fr](https://gabin-clavier.fr)) et redéployé à chaque push sur `main`.
+
+Réglages du projet Cloudflare Pages :
+
+| Réglage | Valeur |
+| --- | --- |
+| Framework preset | None |
+| Build command | `pnpm build` |
+| Build output directory | `out` |
+| Variable d'environnement | `NODE_VERSION` = `22` |

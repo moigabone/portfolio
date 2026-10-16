@@ -48,19 +48,37 @@ export const SECTIONS = [
         <h2 className="font-serif text-2xl font-semibold">{projects.title}</h2>
         <p className="mt-1 text-gray-500">{projects.subtitle}</p>
         <ul className="mt-4 space-y-3">
-          {projects.items.map((p) => (
-            <li key={p.title}>
-              <a
-                href={p.url}
-                target="_blank"
-                rel="noreferrer"
-                className="block rounded-xl border border-slate-200 p-3 transition hover:border-slate-400 hover:bg-slate-50"
-              >
-                <p className="font-semibold">{p.title} ↗</p>
+          {projects.items.map((p) => {
+            const body = (
+              <>
+                <p className="font-semibold">
+                  {p.title}
+                  {p.url && " ↗"}
+                </p>
                 <p className="text-sm text-gray-500">{p.description}</p>
                 <p className="mt-1 text-xs text-gray-400">{p.tags.join(" · ")}</p>
-              </a>
-            </li>
+              </>
+            )
+            const cardClass = "block rounded-xl border border-slate-200 p-3"
+            return (
+              <li key={p.title}>
+                {p.url ? (
+                  <a href={p.url} target="_blank" rel="noreferrer" className={`${cardClass} transition hover:border-slate-400 hover:bg-slate-50`}>
+                    {body}
+                  </a>
+                ) : (
+                  <div className={cardClass}>{body}</div>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+        <p className="mt-4 font-semibold">Prochains projets</p>
+        <Tags items={projects.ideas} />
+        <p className="mt-4 font-semibold">En dehors du code</p>
+        <ul className="mt-2 space-y-1 text-sm">
+          {projects.hobbies.map((h) => (
+            <li key={h}>{h}</li>
           ))}
         </ul>
       </>
@@ -85,6 +103,12 @@ export const SECTIONS = [
         </ol>
         <p className="mt-5 font-semibold">Compétences</p>
         <Tags items={education.skills} />
+        <p className="mt-4 font-semibold">Certifications</p>
+        <ul className="mt-1 text-sm text-gray-600">
+          {education.certifications.map((c) => (
+            <li key={c}>🏅 {c}</li>
+          ))}
+        </ul>
       </>
     ),
   },
@@ -97,14 +121,15 @@ export const SECTIONS = [
         <h2 className="font-serif text-2xl font-semibold">{work.title}</h2>
         <p className="mt-1 text-gray-500">{work.subtitle}</p>
         <p className="mt-4 font-semibold">
-          {work.role} — {work.company}
+          {work.role} · {work.company}
         </p>
-        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
+        <p className="text-xs uppercase tracking-wide text-gray-400">{work.period}</p>
+        <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm">
           {work.missions.map((m) => (
             <li key={m}>{m}</li>
           ))}
         </ul>
-        <ScrollHint />
+        <p className="mt-4 rounded-lg bg-slate-100 p-3 text-sm">{work.highlight}</p>
       </>
     ),
   },
@@ -146,7 +171,7 @@ export function Section({ right, children, ref, style }) {
       className={`flex h-screen flex-col justify-end p-4 md:justify-center md:p-10 ${right ? "md:items-end" : "md:items-start"}`}
     >
       <div className="w-full md:w-1/2 md:max-w-md">
-        <div className="rounded-2xl bg-white/90 px-6 py-6 shadow-lg backdrop-blur md:px-8 md:py-10">
+        <div className="rounded-2xl bg-white/90 px-5 py-5 text-sm shadow-lg backdrop-blur md:px-8 md:py-10 md:text-base">
           {children}
         </div>
       </div>

@@ -1,78 +1,83 @@
 // Tout le texte du site est ici : modifie ce fichier pour mettre à jour le portfolio.
-// ⚠️ Les éléments marqués "exemple" sont fictifs et à remplacer par tes vraies informations.
 
 export const profile = {
   name: "Gabin Clavier",
   firstName: "Gabin",
-  role: "Étudiant ingénieur · Alternant ingénieur réseau",
-  tagline: "Réseaux le jour, 3D et web la nuit. Bienvenue dans mon immeuble : chaque étage raconte une partie de mon parcours.",
+  role: "Apprenti ingénieur réseau · Étudiant ingénieur ESIEA",
+  tagline:
+    "Le jour, je déploie des firewalls et des clusters réseau au NOC d'Ecritel. Le soir, je modélise des pièces en 3D. Bienvenue dans mon immeuble : chaque étage raconte une partie de mon parcours.",
   highlights: [
-    "🎓 Cycle ingénieur à l'ESIEA",
-    "🌐 Alternant ingénieur réseau chez Ecritel",
-    "🧊 Passionné de 3D web (Blender, Three.js)",
+    "🎓 4ᵉ année à l'ESIEA, majeure cybersécurité",
+    "🌐 Apprenti ingénieur réseau au NOC d'Ecritel",
+    "🧊 Passionné de 3D web et d'IA",
   ],
 }
 
-// Une pièce du modèle 3D = une étape du parcours
+// La chambre : projets perso et vie en dehors du travail
 export const projects = {
   title: "Mes projets perso 🛠️",
   subtitle: "Ma chambre, là où naissent les projets du soir.",
   items: [
     {
       title: "Portfolio 3D",
-      description: "Ce site ! Pièces modélisées dans Blender, animées avec React Three Fiber.",
+      description: "Ce site ! Trois pièces modélisées dans Blender, animées avec React Three Fiber.",
       tags: ["Blender", "Three.js", "Next.js"],
-      url: "https://github.com/moigabone",
-    },
-    {
-      title: "Homelab réseau (exemple)",
-      description: "Infra virtualisée avec VLAN, pare-feu et supervision.",
-      tags: ["Proxmox", "pfSense", "Grafana"],
-      url: "https://github.com/moigabone",
-    },
-    {
-      title: "Bot Discord (exemple)",
-      description: "Bot communautaire avec commandes et tableau de bord web.",
-      tags: ["Node.js", "API REST"],
-      url: "https://github.com/moigabone",
+      url: null, // lien vers le code quand le dépôt sera public
     },
   ],
+  ideas: ["App de sport", "App de veille", "Second cerveau"],
+  hobbies: ["🎬 Montage vidéo (edits de voyages sur TikTok)", "🎮 Jeux vidéo", "👕 Mode", "🤖 IA & veille tech", "🎧 Podcast Underscore_"],
 }
 
+// La salle de classe : formation
 export const education = {
   title: "Ma formation 🎓",
   subtitle: "La salle de classe.",
   items: [
-    // Dates à vérifier
-    { period: "Depuis 2025", title: "Cycle ingénieur — ESIEA", detail: "Formation en alternance" },
-    { period: "2022 — 2025", title: "BUT Réseaux & Télécommunications", detail: "IUT de La Roche-sur-Yon" },
+    {
+      period: "Depuis sept. 2025",
+      title: "Diplôme d'ingénieur — ESIEA",
+      detail: "4ᵉ année, majeure cybersécurité, en alternance",
+    },
+    {
+      period: "Sept. 2022 — août 2025",
+      title: "BUT Réseaux & Télécommunications",
+      detail: "IUT de La Roche-sur-Yon, parcours cybersécurité",
+    },
   ],
-  skills: ["Réseaux IP", "Routage & switching", "Linux", "Cybersécurité", "Développement web"],
+  certifications: ["AWS Academy Cloud Foundations (2025)"],
+  skills: ["Cisco", "Juniper", "Stormshield", "BGP · VRF · VXLAN", "VMware vCenter", "Linux", "Cybersécurité"],
 }
 
+// Le bureau : alternance
 export const work = {
   title: "Mon alternance 💼",
   subtitle: "Le bureau, chez Ecritel.",
-  role: "Alternant ingénieur réseau",
+  role: "Apprenti ingénieur réseau — NOC",
   company: "Ecritel",
+  period: "Depuis sept. 2023 · Nantes",
   missions: [
-    "Exploitation et évolution de l'infrastructure réseau (exemple)",
-    "Automatisation de tâches d'administration (exemple)",
-    "Supervision et résolution d'incidents (exemple)",
+    "Déploiement de clusters de firewalls Stormshield pour des clients : VXLAN, firewalls virtuels sur vCenter ou physiques, supervision",
+    "Migrations d'infrastructures existantes, de la réunion de lancement à l'exécution",
+    "Build de deux clusters Juniper et migration des VM",
+    "Responsable de la conformité clients : adressage IP, configurations, contrats",
   ],
+  highlight:
+    "🤖 J'ai créé un agent IA qui, à partir des infos d'un build, génère la checklist et les configurations à pousser (VLAN, routes, VRF, BGP).",
 }
 
 export const contact = {
-  title: "Travaillons ensemble 🤙",
-  subtitle: "Une question, une opportunité ? Écris-moi.",
+  title: "On en parle ? 🤙",
+  subtitle: "Réseau, 3D, IA ou simple curiosité : écris-moi.",
   links: [
-    { label: "Email", value: "contact@exemple.fr", href: "mailto:contact@exemple.fr" },
-    { label: "GitHub", value: "github.com/moigabone", href: "https://github.com/moigabone" },
-    { label: "LinkedIn", value: "Gabin Clavier", href: "https://www.linkedin.com/" },
+    { label: "Email", value: "gabin.clv@gmail.com", href: "mailto:gabin.clv@gmail.com" },
+    { label: "LinkedIn", value: "Gabin Clavier", href: "https://www.linkedin.com/in/gabin-clavier-636253275/" },
+    { label: "GitHub", value: "moigabone", href: "https://github.com/moigabone" },
   ],
 }
 
 export const site = {
+  url: "https://gabin-clavier.fr",
   title: `${profile.name} — Portfolio 3D`,
-  description: `${profile.role}. ${profile.tagline}`,
+  description: `${profile.role}. Un portfolio en 3D : chaque étage raconte une partie de mon parcours.`,
 }
