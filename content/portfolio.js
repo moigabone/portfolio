@@ -22,7 +22,7 @@ export const projects = {
       title: "Portfolio 3D",
       description: "Ce site ! Trois pièces modélisées dans Blender, animées avec React Three Fiber.",
       tags: ["Blender", "Three.js", "Next.js"],
-      url: null, // lien vers le code quand le dépôt sera public
+      url: "https://github.com/moigabone/portfolio",
     },
   ],
   ideas: ["App de sport", "App de veille", "Second cerveau"],
