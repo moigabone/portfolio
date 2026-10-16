@@ -37,7 +37,7 @@ export const education = {
     {
       period: "Depuis sept. 2025",
       title: "Diplôme d'ingénieur — ESIEA",
-      detail: "4ᵉ année, majeure cybersécurité, en alternance",
+      detail: "4ᵉ année, majeure cybersécurité (label SecNumedu), en alternance",
     },
     {
       period: "Sept. 2022 — août 2025",
@@ -46,7 +46,16 @@ export const education = {
     },
   ],
   certifications: ["AWS Academy Cloud Foundations (2025)"],
-  skills: ["Cisco", "Juniper", "Stormshield", "BGP · VRF · VXLAN", "VMware vCenter", "Linux", "Cybersécurité"],
+  // D'après les programmes du BUT R&T cybersécurité et de la majeure cyber ESIEA (4ᵉ année)
+  skills: [
+    "Administration réseaux & Internet",
+    "Pare-feu & détection d'intrusion",
+    "Supervision de SI",
+    "Durcissement Linux / Windows / AD",
+    "Pentest web (OWASP)",
+    "Cryptographie",
+    "Droit de la cybersécurité",
+  ],
 }
 
 // Le bureau : alternance
@@ -62,6 +71,7 @@ export const work = {
     "Build de deux clusters Juniper et migration des VM",
     "Responsable de la conformité clients : adressage IP, configurations, contrats",
   ],
+  tools: ["Stormshield", "Juniper", "Cisco", "BGP · VRF · VXLAN", "VMware vCenter"],
   highlight:
     "🤖 J'ai créé un agent IA qui, à partir des infos d'un build, génère la checklist et les configurations à pousser (VLAN, routes, VRF, BGP).",
 }

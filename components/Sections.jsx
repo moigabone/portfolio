@@ -129,6 +129,7 @@ export const SECTIONS = [
             <li key={m}>{m}</li>
           ))}
         </ul>
+        <Tags items={work.tools} />
         <p className="mt-4 rounded-lg bg-slate-100 p-3 text-sm">{work.highlight}</p>
       </>
     ),
