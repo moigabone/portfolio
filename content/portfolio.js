@@ -4,12 +4,12 @@
 export const profile = {
   name: "Gabin Clavier",
   firstName: "Gabin",
-  role: "Apprenti réseau et sécurité chez Ecritel · Élève ingénieur en cybersécurité à l'ESIEA",
+  role: "Alternant ingénieur réseau et sécurité chez Ecritel · Élève ingénieur en cybersécurité à l'ESIEA",
   tagline:
     "Le jour, je construis des clusters de firewalls pour les clients hébergés d'Ecritel. Le soir, je crée mes propres projets, de la 3D à l'IA. Bienvenue dans mon immeuble : chaque étage raconte une partie de mon parcours.",
   highlights: [
     "4ᵉ année d'école d'ingénieurs à l'ESIEA, majeure cybersécurité",
-    "Apprenti dans l'équipe réseau d'Ecritel depuis 2023",
+    "Alternant dans l'équipe réseau (NOC) d'Ecritel depuis 2023",
     "Passionné de 3D web et d'automatisation par l'IA",
   ],
   cv: { label: "Télécharger mon CV (anglais)", href: "/Gabin_Clavier_CV_EN.pdf" },
@@ -105,16 +105,18 @@ export const education = {
 export const work = {
   eyebrow: "2e étage · Le bureau",
   title: "Mon alternance",
-  role: "Apprenti réseau et sécurité",
+  role: "Alternant ingénieur réseau et sécurité",
   company: "Ecritel",
-  companyDetail: "Hébergement cloud et infogérance",
+  companyDetail: "Équipe réseau (NOC) · hébergement cloud et infogérance",
   period: "Depuis 2023 · Nantes",
   missions: [
-    "Construction de clusters de firewalls Stormshield avec plan de reprise pour les nouveaux clients : de l'environnement VM aux règles de flux, DNS, contrôle d'accès, routage BGP, haute disponibilité et supervision",
-    "Refonte d'infrastructures existantes, dont la migration de firewalls mutualisés vers des clusters dédiés, avec l'équipe système pour la migration des VM",
-    "Configuration et maintenance de switchs, routeurs et firewalls (Stormshield, Fortinet, Cisco) pour les clients hébergés",
+    "Construction de clusters de firewalls Stormshield avec plan de reprise pour les nouveaux clients : firewalls virtuels sur vCenter ou physiques, VXLAN, règles de flux, DNS, contrôle d'accès, routage BGP, haute disponibilité et supervision",
+    "Refonte d'infrastructures existantes, dont la migration de firewalls mutualisés vers des clusters dédiés, de la réunion de lancement à l'exécution, avec l'équipe système pour la migration des VM",
+    "Build de deux clusters Juniper et migration des VM",
+    "Configuration et maintenance de switchs, routeurs et firewalls (Stormshield, Fortinet, Cisco, Juniper) pour les clients hébergés",
+    "Responsable de la conformité clients : adressage IP, configurations, contrats",
   ],
-  tools: ["Stormshield", "Fortinet", "Cisco", "BGP", "Haute disponibilité", "Plan de reprise", "VMware"],
+  tools: ["Stormshield", "Fortinet", "Cisco", "Juniper", "BGP · VRF · VXLAN", "Haute disponibilité", "Plan de reprise", "VMware vCenter"],
   highlight:
     "J'ai créé un agent IA qui, à partir des infos d'un build, génère la checklist et les configurations à pousser (VLAN, routes, VRF, BGP).",
 }

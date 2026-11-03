@@ -179,7 +179,9 @@ export const SECTIONS = [
         <p className="text-sm text-ash">{work.companyDetail}</p>
         <p className="text-xs uppercase tracking-[0.14em] text-mist">{work.period}</p>
         <Dots items={work.missions} className="mt-3 text-sm" />
-        <Tags items={work.tools} />
+        <div className="hidden md:block">
+          <Tags items={work.tools} />
+        </div>
         <p className="mt-4 border-l-2 border-gilt bg-night/40 p-3 text-sm">{work.highlight}</p>
       </>
     ),
