@@ -11,6 +11,7 @@ export const profile = {
     "🌐 Apprenti ingénieur réseau au NOC d'Ecritel",
     "🧊 Passionné de 3D web et d'IA",
   ],
+  cv: { label: "Télécharger mon CV (anglais)", href: "/Gabin_Clavier_CV_EN.pdf" },
 }
 
 // La chambre : projets perso et vie en dehors du travail
@@ -24,8 +25,27 @@ export const projects = {
       tags: ["Blender", "Three.js", "Next.js"],
       url: "https://github.com/moigabone/portfolio",
     },
+    {
+      title: "Codex",
+      description: "Mon carnet de films, séries, anime, manga et jeux, avec où j'en suis. Recherche TMDB et AniList, installable sur téléphone.",
+      tags: ["Next.js", "Supabase"],
+      url: "https://codex.gabin-clavier.fr",
+    },
+    {
+      title: "Veille",
+      description: "Le récap de l'actu prêt chaque matin : 30 flux RSS lus automatiquement, regroupés et résumés par Claude. Privé, sur invitation.",
+      tags: ["GitHub Actions", "Supabase", "API Claude"],
+      url: "https://veille.gabin-clavier.fr",
+    },
+    {
+      title: "La carte",
+      description: "La carte interactive de mes sites et de tout ce qui les fait tourner, avec des parcours animés.",
+      tags: ["JavaScript", "SVG", "Three.js"],
+      url: "https://links.gabin-clavier.fr",
+    },
   ],
-  ideas: ["App de sport", "App de veille", "Second cerveau"],
+  afterHours: "En dehors du code 🌙",
+  ideas: ["App de sport", "Second cerveau"],
   hobbies: [
     { label: "🎬 Montage vidéo : mes edits de voyages sur TikTok", href: "https://www.tiktok.com/@_gab11_" },
     { label: "🎮 Jeux vidéo" },
@@ -86,6 +106,7 @@ export const contact = {
   title: "On en parle ? 🤙",
   subtitle: "Réseau, 3D, IA ou simple curiosité : écris-moi.",
   links: [
+    { label: "CV", value: "PDF, en anglais", href: "/Gabin_Clavier_CV_EN.pdf" },
     { label: "Email", value: "gabin.clv@gmail.com", href: "mailto:gabin.clv@gmail.com" },
     { label: "LinkedIn", value: "Gabin Clavier", href: "https://www.linkedin.com/in/gabin-clavier-636253275/" },
     { label: "GitHub", value: "moigabone", href: "https://github.com/moigabone" },

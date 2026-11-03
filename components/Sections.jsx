@@ -35,6 +35,14 @@ export const SECTIONS = [
             <li key={h}>{h}</li>
           ))}
         </ul>
+        <a
+          href={profile.cv.href}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-5 inline-block rounded-lg bg-slate-900 px-4 py-2 font-semibold text-white transition hover:bg-slate-700"
+        >
+          {profile.cv.label} ↓
+        </a>
         <ScrollHint />
       </>
     ),
@@ -56,7 +64,7 @@ export const SECTIONS = [
                   {p.url && " ↗"}
                 </p>
                 <p className="text-sm text-gray-500">{p.description}</p>
-                <p className="mt-1 text-xs text-gray-400">{p.tags.join(" · ")}</p>
+                <p className="mt-1 hidden text-xs text-gray-400 md:block">{p.tags.join(" · ")}</p>
               </>
             )
             const cardClass = "block rounded-xl border border-slate-200 p-3"
@@ -73,9 +81,19 @@ export const SECTIONS = [
             )
           })}
         </ul>
+      </>
+    ),
+  },
+  {
+    id: "loisirs",
+    room: "chambre",
+    right: true,
+    content: (
+      <>
+        <h2 className="font-serif text-2xl font-semibold">{projects.afterHours}</h2>
         <p className="mt-4 font-semibold">Prochains projets</p>
         <Tags items={projects.ideas} />
-        <p className="mt-4 font-semibold">En dehors du code</p>
+        <p className="mt-4 font-semibold">Ce que j'aime</p>
         <ul className="mt-2 space-y-1 text-sm">
           {projects.hobbies.map((h) => (
             <li key={h.label}>
@@ -95,7 +113,7 @@ export const SECTIONS = [
   {
     id: "formation",
     room: "classe",
-    right: true,
+    right: false,
     content: (
       <>
         <h2 className="font-serif text-2xl font-semibold">{education.title}</h2>
@@ -123,7 +141,7 @@ export const SECTIONS = [
   {
     id: "alternance",
     room: "bureau",
-    right: false,
+    right: true,
     content: (
       <>
         <h2 className="font-serif text-2xl font-semibold">{work.title}</h2>
@@ -145,7 +163,7 @@ export const SECTIONS = [
   {
     id: "contact",
     room: null,
-    right: true,
+    right: false,
     content: (
       <>
         <h2 className="font-serif text-2xl font-semibold">{contact.title}</h2>
