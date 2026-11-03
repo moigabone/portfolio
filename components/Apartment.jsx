@@ -2,8 +2,27 @@
 import { useMemo, useRef } from "react"
 import { useGLTF, useScroll } from "@react-three/drei"
 import { useFrame, useThree } from "@react-three/fiber"
-import { Box3, CanvasTexture, DoubleSide, MathUtils, Mesh, MeshStandardMaterial, PlaneGeometry, SRGBColorSpace, Sphere, Vector3 } from "three"
+import {
+  AdditiveBlending,
+  Box3,
+  BufferAttribute,
+  BufferGeometry,
+  CanvasTexture,
+  DoubleSide,
+  MathUtils,
+  Mesh,
+  MeshStandardMaterial,
+  Object3D,
+  PlaneGeometry,
+  PointLight,
+  Points,
+  PointsMaterial,
+  SRGBColorSpace,
+  Sphere,
+  Vector3,
+} from "three"
 import { SECTIONS, NB_SECTIONS } from "./Sections"
+import { animatePerson, makePerson, setOpacity } from "./Person"
 
 const MODEL_URL = "/models/appart.glb"
 const MODEL_ROTATION = -Math.PI / 3
@@ -11,26 +30,43 @@ const MODEL_ROTATION = -Math.PI / 3
 // Réglages de la caméra
 const VIEW_DIRECTION = new Vector3(0, 0.35, 1).normalize() // vue de face, légèrement en plongée
 const OVERVIEW_ZOOM = 0.75 // vue d'ensemble : l'immeuble entier est cadré
-const ROOM_ZOOM = 0.62 // < 1 : la caméra se rapproche de chaque pièce
+const ROOM_ZOOM = 0.55 // < 1 : la caméra se rapproche de chaque pièce
+const MOBILE_ROOM_ZOOM = 0.8 // sur téléphone, la pièce n'a que le haut de l'écran : on la cadre en entier
 const PARALLAX = 0.08 // amplitude du mouvement de caméra qui suit la souris
+const ORBIT = { angle: 0.12, period: 40 } // la caméra va et vient autour de l'immeuble (radians, secondes par aller-retour)
+
+// Mouvement des pièces au scroll, en rayons de pièce
+const SPREAD = 0.3 // les étages s'écartent quand on entre dans une pièce
+const PULL = 0.3 // la pièce visitée avance vers la caméra, les autres reculent
+const FLOAT = 0.02 // chaque pièce flotte doucement
 
 // Renforce les couleurs d'origine du modèle (1 = couleurs de Blender)
 const SATURATION = 1.4
 
-// Repère de la caméra (fixe : seule sa position change)
-const FORWARD = VIEW_DIRECTION.clone().negate()
-const RIGHT = new Vector3().crossVectors(FORWARD, new Vector3(0, 1, 0)).normalize()
-const UP = new Vector3().crossVectors(RIGHT, FORWARD).normalize()
-
 // Nuit : les écrans s'allument, une lampe chaude éclaire chaque pièce
 const SCREEN_MATERIAL = "Material.004" // la dalle des écrans, dans les trois pièces
-const ROOMS = ["chambre", "classe", "bureau"]
+const ROOMS = ["chambre", "classe", "bureau"] // de bas en haut
 const LAMP = { color: "#ffb46b", intensity: 6, reach: 1.7 } // reach : portée, en rayons de pièce
 
-// L'affiche de la chambre devient une bannière brodée : un clin d'œil à mes autres sites
-const POSTER = { room: "chambre", material: "Matériau.027", vertices: 12 }
+// Repérés dans le modèle : matériau et nombre de sommets de chaque objet
+const POSTER = { room: "chambre", material: "Matériau.027", vertices: 12 } // devient une bannière brodée
+const BEDSIDE_LAMP = { room: "chambre", material: "Matériau.027", vertices: 691 } // l'abat-jour s'allume
+const PLANTS = { material: "Matériau.022", vertices: 560 } // les feuilles se balancent
+const CHAIRS = {
+  chambre: { material: "Matériau.041", vertices: 3311 },
+  classe: { material: "Matériau.015", vertices: 328 },
+  bureau: { material: "Matériau.041", vertices: 3311 },
+}
+const DESK_HEIGHT = 0.75 // en mètres : sert à mettre le personnage à l'échelle de chaque pièce
 
 const sphereOf = (object) => new Box3().setFromObject(object).getBoundingSphere(new Sphere())
+const findMesh = (root, { material, vertices }) => {
+  let found = null
+  root.traverse((c) => {
+    if (!found && c.isMesh && c.material.name === material && c.geometry.attributes.position.count === vertices) found = c
+  })
+  return found
+}
 
 function bannerTexture() {
   const w = 256, h = 346
@@ -86,131 +122,319 @@ function bannerTexture() {
   return texture
 }
 
-// Remplace l'affiche par une bannière de la même taille, posée juste devant le mur
-function hangBanner(scene) {
-  const room = scene.getObjectByName(POSTER.room)
-  let poster = null
-  room?.traverse((child) => {
-    if (child.isMesh && child.material.name === POSTER.material && child.geometry.attributes.position.count === POSTER.vertices) poster = child
-  })
-  if (!poster) return
+// Remplace l'affiche par une bannière de la même taille, accrochée par le haut pour pouvoir onduler
+function hangBanner(room) {
+  const poster = findMesh(room, POSTER)
+  if (!poster) return null
   poster.geometry.computeBoundingBox()
   const box = poster.geometry.boundingBox
   const size = box.getSize(new Vector3())
+  const geometry = new PlaneGeometry(size.x, size.y)
+  geometry.translate(0, -size.y / 2, 0)
   const banner = new Mesh(
-    new PlaneGeometry(size.x, size.y),
+    geometry,
     new MeshStandardMaterial({ map: bannerTexture(), transparent: true, alphaTest: 0.5, roughness: 0.85, side: DoubleSide }),
   )
-  banner.position.set((box.min.x + box.max.x) / 2, (box.min.y + box.max.y) / 2, box.max.z + 0.002)
-  banner.position.applyMatrix4(poster.matrix)
-  banner.name = "banniere"
+  banner.position.set((box.min.x + box.max.x) / 2, box.max.y, box.max.z + 0.004).applyMatrix4(poster.matrix)
+  banner.castShadow = true
   poster.parent.add(banner)
   poster.visible = false
+  return banner
+}
+
+// Place un objet sur un pivot au bas de sa boîte, pour le faire pivoter depuis sa base (plante dans son pot)
+function pivotAtBase(mesh) {
+  mesh.geometry.computeBoundingBox()
+  const box = mesh.geometry.boundingBox
+  const pivot = new Object3D()
+  pivot.position.set((box.min.x + box.max.x) / 2, box.min.y, (box.min.z + box.max.z) / 2).applyMatrix4(mesh.matrix)
+  mesh.parent.add(pivot)
+  pivot.updateMatrixWorld(true)
+  pivot.attach(mesh)
+  return pivot
+}
+
+// Points de toutes les dalles d'écran d'une pièce, dans le repère du monde
+function screenPoints(room) {
+  const points = []
+  room.traverse((c) => {
+    if (!c.isMesh || c.material.name !== SCREEN_MATERIAL) return
+    const pos = c.geometry.attributes.position
+    for (let i = 0; i < pos.count; i++) points.push(new Vector3().fromBufferAttribute(pos, i).applyMatrix4(c.matrixWorld))
+  })
+  return points
+}
+
+// Assoit le personnage sur la chaise de la pièce, tourné vers l'écran le plus proche
+function seatPerson(room, chairSpec) {
+  const chair = findMesh(room, chairSpec)
+  const screens = screenPoints(room)
+  if (!chair || !screens.length) return null
+  const seat = new Box3().setFromObject(chair)
+  const center = seat.getCenter(new Vector3())
+  const flat = (v) => new Vector3(v.x, 0, v.z)
+  const nearest = screens.reduce((a, b) => (flat(a).distanceTo(flat(center)) < flat(b).distanceTo(flat(center)) ? a : b))
+  const screen = screens.filter((p) => p.distanceTo(nearest) < 0.6)
+  const screenCenter = screen.reduce((sum, p) => sum.add(p), new Vector3()).divideScalar(screen.length)
+  // Le bas des écrans repose sur le bureau : de quoi en déduire l'échelle de la pièce
+  const deskTop = Math.min(...screen.map((p) => p.y)) - 0.15
+  const scale = (deskTop - seat.min.y) / DESK_HEIGHT
+  const facing = flat(screenCenter).sub(flat(center)).normalize()
+
+  const person = makePerson()
+  person.root.scale.setScalar(scale)
+  person.root.position.set(center.x, seat.min.y, center.z).addScaledVector(facing, -0.06 * scale)
+  person.root.rotation.y = Math.atan2(facing.x, facing.z)
+  person.root.updateMatrixWorld(true)
+  room.attach(person.root)
+  return person
+}
+
+// Poussière dorée qui flotte dans la pièce
+function makeDust(room, count = 36) {
+  const box = new Box3().setFromObject(room)
+  const size = box.getSize(new Vector3())
+  const base = new Float32Array(count * 3)
+  for (let i = 0; i < count; i++) {
+    base[i * 3] = box.min.x + size.x * (0.15 + Math.random() * 0.7)
+    base[i * 3 + 1] = box.min.y + size.y * (0.1 + Math.random() * 0.7)
+    base[i * 3 + 2] = box.min.z + size.z * (0.15 + Math.random() * 0.7)
+  }
+  const geometry = new BufferGeometry()
+  geometry.setAttribute("position", new BufferAttribute(base.slice(), 3))
+  const dust = new Points(
+    geometry,
+    new PointsMaterial({ color: "#ffd36a", size: 0.045, transparent: true, opacity: 0.7, depthWrite: false, blending: AdditiveBlending }),
+  )
+  room.attach(dust)
+  // Positions de départ dans le repère de la pièce, autour desquelles chaque grain dérive
+  dust.updateMatrixWorld(true)
+  const inv = room.matrixWorld.clone().invert()
+  const local = new Vector3()
+  for (let i = 0; i < count; i++) {
+    local.fromArray(base, i * 3).applyMatrix4(inv).toArray(base, i * 3)
+  }
+  dust.position.set(0, 0, 0)
+  dust.rotation.set(0, 0, 0)
+  dust.scale.set(1, 1, 1)
+  geometry.attributes.position.array.set(base)
+  return { points: dust, base, amplitude: 0.06 / room.getWorldScale(new Vector3()).x }
+}
+
+function animateDust({ points, base, amplitude }, time) {
+  const pos = points.geometry.attributes.position
+  for (let i = 0; i < pos.count; i++) {
+    const k = i * 1.7
+    pos.setXYZ(
+      i,
+      base[i * 3] + Math.sin(time * 0.3 + k) * amplitude,
+      base[i * 3 + 1] + Math.sin(time * 0.22 + k * 1.3) * amplitude * 1.5,
+      base[i * 3 + 2] + Math.cos(time * 0.27 + k) * amplitude,
+    )
+  }
+  pos.needsUpdate = true
 }
 
 // Position et cible de la caméra pour cadrer une sphère, du côté opposé à la carte de texte
-function frame(shot, camera, size, out) {
+function frame(shot, sphere, camera, size, axes, out) {
   const isMobile = size.width < 768
   const aspect = size.width / size.height
   const vFov = MathUtils.degToRad(camera.fov)
   const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect)
   // La carte occupe la moitié de l'écran (à côté sur ordinateur, en dessous sur mobile)
   const fitFov = isMobile ? Math.min(vFov / 2, hFov) : Math.min(vFov, hFov / 2)
-  const distance = (shot.sphere.radius / Math.sin(fitFov / 2)) * shot.zoom
+  const zoom = isMobile && shot.room >= 0 ? MOBILE_ROOM_ZOOM : shot.zoom
+  const distance = (sphere.radius / Math.sin(fitFov / 2)) * zoom
 
-  out.target.copy(shot.sphere.center)
+  out.target.copy(sphere.center)
   if (isMobile) {
-    out.target.addScaledVector(UP, -0.5 * distance * Math.tan(vFov / 2))
+    out.target.addScaledVector(axes.up, -0.5 * distance * Math.tan(vFov / 2))
   } else {
-    out.target.addScaledVector(RIGHT, (shot.right ? 0.42 : -0.42) * distance * Math.tan(hFov / 2))
+    out.target.addScaledVector(axes.right, (shot.right ? 0.42 : -0.42) * distance * Math.tan(hFov / 2))
   }
-  out.position.copy(out.target).addScaledVector(VIEW_DIRECTION, distance)
+  out.position.copy(out.target).addScaledVector(axes.view, distance)
   out.distance = distance
   return out
 }
 
 const makeView = () => ({ target: new Vector3(), position: new Vector3(), distance: 0 })
+const WORLD_UP = new Vector3(0, 1, 0)
 
 export default function Apartment({ reducedMotion = false }) {
   const scroll = useScroll()
   const { camera, size, pointer } = useThree()
   const { scene } = useGLTF(MODEL_URL)
-  const views = useRef({ a: makeView(), b: makeView(), lookAt: new Vector3(), parallax: { x: 0, y: 0 } })
+  const state = useRef({
+    a: makeView(),
+    b: makeView(),
+    lookAt: new Vector3(),
+    parallax: { x: 0, y: 0 },
+    axes: { view: new Vector3(), right: new Vector3(), up: new Vector3() },
+    spheres: ROOMS.map(() => new Sphere()),
+    overview: new Sphere(),
+    offset: new Vector3(),
+  })
 
-  // Prépare le modèle une seule fois : centrage, ombres, couleurs, puis calcule le cadrage de chaque section
-  const shots = useMemo(() => {
-    scene.rotation.set(0, MODEL_ROTATION, 0)
-    scene.position.set(0, 0, 0)
-    scene.updateMatrixWorld(true)
-    scene.position.sub(new Box3().setFromObject(scene).getCenter(new Vector3()))
-    scene.updateMatrixWorld(true)
+  // Prépare le modèle une seule fois : centrage, ombres, couleurs, décor animé et personnage
+  const world = useMemo(() => {
+    // useGLTF garde la scène en cache : on ne la prépare qu'une fois, même si le composant remonte
+    if (!scene.userData.world) {
+      scene.rotation.set(0, MODEL_ROTATION, 0)
+      scene.position.set(0, 0, 0)
+      scene.updateMatrixWorld(true)
+      scene.position.sub(new Box3().setFromObject(scene).getCenter(new Vector3()))
+      scene.updateMatrixWorld(true)
 
-    scene.traverse((child) => {
-      if (!child.isMesh) return
-      child.castShadow = true
-      child.receiveShadow = true
-      const material = child.material
-      if (material.userData.graded) return
-      const hsl = {}
-      material.color.getHSL(hsl)
-      material.color.setHSL(hsl.h, Math.min(1, hsl.s * SATURATION), hsl.l)
-      if (material.name === SCREEN_MATERIAL) {
-        material.emissive.set("#5f7dff")
-        material.emissiveIntensity = 0.7
+      let screen = null
+      scene.traverse((child) => {
+        if (!child.isMesh) return
+        child.castShadow = true
+        child.receiveShadow = true
+        const material = child.material
+        if (material.name === SCREEN_MATERIAL) screen = material
+        if (material.userData.graded) return
+        const hsl = {}
+        material.color.getHSL(hsl)
+        material.color.setHSL(hsl.h, Math.min(1, hsl.s * SATURATION), hsl.l)
+        if (material.name === SCREEN_MATERIAL) material.emissive.set("#5f7dff")
+        material.userData.graded = true
+      })
+
+      const rooms = ROOMS.map((name) => {
+        const object = scene.getObjectByName(name)
+        const sphere = sphereOf(object)
+        const lamp = new PointLight(LAMP.color, LAMP.intensity, sphere.radius * LAMP.reach, 2)
+        lamp.position.copy(sphere.center).add(new Vector3(0, sphere.radius * 0.1, sphere.radius * 0.15))
+        object.attach(lamp)
+        return { name, object, sphere, base: object.position.clone(), dust: makeDust(object) }
+      })
+      const chambre = rooms[0].object
+
+      // L'abat-jour de la chambre s'allume, avec sa propre petite lumière
+      let bedside = null
+      const shade = findMesh(chambre, BEDSIDE_LAMP)
+      if (shade) {
+        shade.material = shade.material.clone()
+        shade.material.emissive.set("#ffb46b")
+        shade.material.emissiveIntensity = 0.8
+        const glow = new PointLight("#ffb46b", 1.5, 2.5, 2)
+        glow.position.copy(new Box3().setFromObject(shade).getCenter(new Vector3()))
+        chambre.attach(glow)
+        bedside = { material: shade.material, light: glow }
       }
-      material.userData.graded = true
-    })
-    if (!scene.getObjectByName("banniere")) hangBanner(scene)
 
-    const overview = sphereOf(scene)
-    return SECTIONS.map((s) => ({
-      sphere: s.room ? sphereOf(scene.getObjectByName(s.room)) : overview,
-      zoom: s.room ? ROOM_ZOOM : OVERVIEW_ZOOM,
-      right: s.right,
-    }))
+      const plants = []
+      for (const room of rooms) {
+        const leaves = findMesh(room.object, PLANTS)
+        if (leaves) plants.push(pivotAtBase(leaves))
+      }
+
+      scene.userData.world = {
+        rooms,
+        screen,
+        bedside,
+        plants,
+        banner: hangBanner(chambre),
+        people: rooms.map((r) => seatPerson(r.object, CHAIRS[r.name])),
+        overview: sphereOf(scene),
+      }
+    }
+
+    const { rooms, overview } = scene.userData.world
+    // Pour chaque section : la pièce visitée (ou aucune) et où se trouve le personnage
+    const shots = SECTIONS.map((s) => {
+      const room = ROOMS.indexOf(s.room)
+      return {
+        room,
+        zoom: s.room ? ROOM_ZOOM : OVERVIEW_ZOOM,
+        right: s.right,
+        // En vue d'ensemble, le personnage est au bureau, en haut de l'immeuble
+        person: room >= 0 ? room : ROOMS.indexOf("bureau"),
+      }
+    })
+    // Direction de la caméra, exprimée dans le repère de l'immeuble (qui est tourné)
+    const towardCamera = new Vector3(VIEW_DIRECTION.x, 0, VIEW_DIRECTION.z).normalize().applyAxisAngle(WORLD_UP, -MODEL_ROTATION)
+    return { ...scene.userData.world, rooms, overview, shots, towardCamera }
   }, [scene])
 
-  // Une lampe au milieu de chaque pièce, un peu au-dessus du sol
-  const lamps = useMemo(
-    () =>
-      ROOMS.map((name) => {
-        const { center, radius } = sphereOf(scene.getObjectByName(name))
-        return { name, position: center.clone().add(new Vector3(0, radius * 0.1, radius * 0.15)), distance: radius * LAMP.reach }
-      }),
-    [scene],
-  )
-
-  useFrame((_, delta) => {
-    const v = views.current
+  useFrame(({ clock }, delta) => {
+    const s = state.current
+    const time = reducedMotion ? 0 : clock.elapsedTime
+    const { rooms, shots, people } = world
 
     // Position entre deux sections, adoucie pour marquer une pause sur chaque pièce
     const position = scroll.offset * (NB_SECTIONS - 1)
     const i = Math.min(Math.floor(position), NB_SECTIONS - 2)
     const t = MathUtils.smootherstep(position - i, 0, 1)
+    const from = shots[i], to = shots[i + 1]
+    const weight = (pick) => (k) => MathUtils.lerp(pick(from) === k ? 1 : 0, pick(to) === k ? 1 : 0, t)
+    const focus = weight((shot) => shot.room)
+    const presence = weight((shot) => shot.person)
+    const spread = MathUtils.lerp(from.room >= 0 ? 1 : 0, to.room >= 0 ? 1 : 0, t)
 
-    const a = frame(shots[i], camera, size, v.a)
-    const b = frame(shots[i + 1], camera, size, v.b)
+    // Les étages s'écartent, la pièce visitée avance, et chacune flotte doucement
+    rooms.forEach((room, k) => {
+      const r = room.sphere.radius
+      const lift = (k - 1) * spread * SPREAD * r
+      const pull = (focus(k) - spread * 0.5) * PULL * r
+      s.offset.copy(world.towardCamera).multiplyScalar(pull)
+      s.offset.y += lift
+      // Sphère de cadrage : sans le flottement, pour que la caméra reste posée
+      s.spheres[k].center.copy(room.sphere.center).add(s.offset.clone().applyAxisAngle(WORLD_UP, MODEL_ROTATION))
+      s.spheres[k].radius = r
+      s.offset.y += Math.sin(time * 0.5 + k * 2.1) * FLOAT * r
+      room.object.position.copy(room.base).add(s.offset)
+    })
+    s.overview.center.copy(world.overview.center)
+    s.overview.radius = world.overview.radius * (1 + spread * SPREAD * 0.5)
+
+    // Caméra : un lent mouvement de va-et-vient autour de l'immeuble
+    const orbit = Math.sin((time / ORBIT.period) * Math.PI * 2) * ORBIT.angle
+    s.axes.view.copy(VIEW_DIRECTION).applyAxisAngle(WORLD_UP, orbit)
+    s.axes.right.crossVectors(s.axes.view.clone().negate(), WORLD_UP).normalize()
+    s.axes.up.crossVectors(s.axes.right, s.axes.view.clone().negate()).normalize()
+
+    const sphereFor = (shot) => (shot.room >= 0 ? s.spheres[shot.room] : s.overview)
+    const a = frame(from, sphereFor(from), camera, size, s.axes, s.a)
+    const b = frame(to, sphereFor(to), camera, size, s.axes, s.b)
     camera.position.lerpVectors(a.position, b.position, t)
-    v.lookAt.lerpVectors(a.target, b.target, t)
+    s.lookAt.lerpVectors(a.target, b.target, t)
 
     // Léger décalage de la caméra qui suit la souris
     if (!reducedMotion) {
-      v.parallax.x = MathUtils.damp(v.parallax.x, pointer.x, 3, delta)
-      v.parallax.y = MathUtils.damp(v.parallax.y, pointer.y, 3, delta)
+      s.parallax.x = MathUtils.damp(s.parallax.x, pointer.x, 3, delta)
+      s.parallax.y = MathUtils.damp(s.parallax.y, pointer.y, 3, delta)
       const amount = MathUtils.lerp(a.distance, b.distance, t) * PARALLAX
-      camera.position.addScaledVector(RIGHT, v.parallax.x * amount).addScaledVector(UP, v.parallax.y * amount)
+      camera.position.addScaledVector(s.axes.right, s.parallax.x * amount).addScaledVector(s.axes.up, s.parallax.y * amount)
     }
-    camera.lookAt(v.lookAt)
+    camera.lookAt(s.lookAt)
+
+    // Le personnage apparaît dans la pièce visitée et s'efface de celle qu'on quitte
+    people.forEach((person, k) => {
+      if (!person) return
+      setOpacity(person, MathUtils.smoothstep(presence(k), 0.15, 0.85))
+      if (person.root.visible) animatePerson(person, time, k * 3.7)
+    })
+
+    // Décor : plantes, bannière, écrans, lampe de chevet, poussière
+    world.plants.forEach((p, k) => {
+      p.rotation.z = Math.sin(time * 0.8 + k) * 0.05
+      p.rotation.x = Math.sin(time * 0.6 + k * 2) * 0.035
+    })
+    if (world.banner) {
+      world.banner.rotation.x = -(0.5 + 0.5 * Math.sin(time * 0.7)) * 0.08
+      world.banner.rotation.z = Math.sin(time * 0.45) * 0.015
+    }
+    if (world.screen) world.screen.emissiveIntensity = 0.65 + Math.sin(time * 0.9) * 0.08
+    if (world.bedside) {
+      const flicker = 1 + Math.sin(time * 2.3) * 0.04 + Math.sin(time * 5.1) * 0.025
+      world.bedside.light.intensity = 1.5 * flicker
+      world.bedside.material.emissiveIntensity = 0.8 * flicker
+    }
+    if (!reducedMotion) rooms.forEach((room) => animateDust(room.dust, time))
   })
 
-  return (
-    <>
-      <primitive object={scene} />
-      {lamps.map((l) => (
-        <pointLight key={l.name} position={l.position} color={LAMP.color} intensity={LAMP.intensity} distance={l.distance} decay={2} />
-      ))}
-    </>
-  )
+  return <primitive object={scene} />
 }
 
 useGLTF.preload(MODEL_URL)

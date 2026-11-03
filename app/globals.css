@@ -40,3 +40,34 @@ body {
 ::selection {
   background: rgb(255 211 106 / 0.35);
 }
+
+/* Étoiles filantes, derrière la scène 3D (le canvas est transparent) */
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  z-index: -1;
+  top: 12%;
+  left: 70%;
+  width: 140px;
+  height: 1px;
+  background: linear-gradient(90deg, rgb(255 236 204 / 0), #fff4dc);
+  opacity: 0;
+  transform: rotate(-24deg);
+  pointer-events: none;
+}
+body::after {
+  top: 30%;
+  left: 40%;
+  width: 100px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  body::before { animation: shooting-star 13s 3s ease-in infinite; }
+  body::after { animation: shooting-star 19s 9s ease-in infinite; }
+}
+@keyframes shooting-star {
+  0% { opacity: 0; transform: rotate(-24deg) translateX(0); }
+  1% { opacity: 1; }
+  6% { opacity: 0; transform: rotate(-24deg) translateX(-420px); }
+  100% { opacity: 0; transform: rotate(-24deg) translateX(-420px); }
+}
