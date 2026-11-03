@@ -1,27 +1,29 @@
 // Tout le texte du site est ici : modifie ce fichier pour mettre à jour le portfolio.
+// Il suit le CV (public/Gabin_Clavier_CV_EN.pdf) : quand l'un change, pense à l'autre.
 
 export const profile = {
   name: "Gabin Clavier",
   firstName: "Gabin",
-  role: "Apprenti ingénieur réseau · Étudiant ingénieur ESIEA",
+  role: "Apprenti réseau et sécurité chez Ecritel · Élève ingénieur en cybersécurité à l'ESIEA",
   tagline:
-    "Le jour, je déploie des firewalls et des clusters réseau au NOC d'Ecritel. Le soir, je modélise des pièces en 3D. Bienvenue dans mon immeuble : chaque étage raconte une partie de mon parcours.",
+    "Le jour, je construis des clusters de firewalls pour les clients hébergés d'Ecritel. Le soir, je crée mes propres projets, de la 3D à l'IA. Bienvenue dans mon immeuble : chaque étage raconte une partie de mon parcours.",
   highlights: [
-    "🎓 4ᵉ année à l'ESIEA, majeure cybersécurité",
-    "🌐 Apprenti ingénieur réseau au NOC d'Ecritel",
-    "🧊 Passionné de 3D web et d'IA",
+    "4ᵉ année d'école d'ingénieurs à l'ESIEA, majeure cybersécurité",
+    "Apprenti dans l'équipe réseau d'Ecritel depuis 2023",
+    "Passionné de 3D web et d'automatisation par l'IA",
   ],
   cv: { label: "Télécharger mon CV (anglais)", href: "/Gabin_Clavier_CV_EN.pdf" },
 }
 
 // La chambre : projets perso et vie en dehors du travail
 export const projects = {
-  title: "Mes projets perso 🛠️",
-  subtitle: "Ma chambre, là où naissent les projets du soir.",
+  eyebrow: "Rez-de-chaussée · La chambre",
+  title: "Mes projets perso",
+  subtitle: "Là où naissent les projets du soir, conçus et mis en ligne avec Claude Code.",
   items: [
     {
       title: "Portfolio 3D",
-      description: "Ce site ! Trois pièces modélisées dans Blender, animées avec React Three Fiber.",
+      description: "Ce site : un immeuble modélisé dans Blender, qu'on explore en faisant défiler la page.",
       tags: ["Blender", "Three.js", "Next.js"],
       url: "https://github.com/moigabone/portfolio",
     },
@@ -44,67 +46,83 @@ export const projects = {
       url: "https://links.gabin-clavier.fr",
     },
   ],
-  afterHours: "En dehors du code 🌙",
+  afterHours: "En dehors du code",
   ideas: ["App de sport", "Second cerveau"],
   hobbies: [
-    { label: "🎬 Montage vidéo : mes edits de voyages sur TikTok", href: "https://www.tiktok.com/@_gab11_" },
-    { label: "🎮 Jeux vidéo" },
-    { label: "👕 Mode" },
-    { label: "🤖 IA & veille tech" },
-    { label: "🎧 Podcast Underscore_" },
+    { label: "Montage vidéo : mes vlogs de voyage sur TikTok", href: "https://www.tiktok.com/@_gab11_" },
+    { label: "Course à pied et musculation au poids du corps" },
+    { label: "Jeux vidéo" },
+    { label: "Mode" },
+    { label: "IA et veille tech, avec le podcast Underscore_" },
   ],
 }
 
-// La salle de classe : formation
+// La salle de classe : formation et projets d'école
 export const education = {
-  title: "Ma formation 🎓",
-  subtitle: "La salle de classe.",
+  eyebrow: "1er étage · La salle de classe",
+  title: "Ma formation",
   items: [
     {
-      period: "Depuis sept. 2025",
-      title: "Diplôme d'ingénieur — ESIEA",
-      detail: "4ᵉ année, majeure cybersécurité (label SecNumedu), en alternance",
+      period: "2025 — 2028",
+      title: "Diplôme d'ingénieur, cybersécurité — ESIEA",
+      detail: "En alternance, à Laval (label SecNumedu)",
     },
     {
-      period: "Sept. 2022 — août 2025",
-      title: "BUT Réseaux & Télécommunications",
-      detail: "IUT de La Roche-sur-Yon, parcours cybersécurité",
+      period: "2022 — 2025",
+      title: "BUT Réseaux et Télécommunications",
+      detail: "IUT de La Roche-sur-Yon, Nantes Université, parcours cybersécurité",
     },
   ],
-  certifications: ["AWS Academy Cloud Foundations (2025)"],
-  // D'après les programmes du BUT R&T cybersécurité et de la majeure cyber ESIEA (4ᵉ année)
   skills: [
-    "Administration réseaux & Internet",
-    "Pare-feu & détection d'intrusion",
-    "Supervision de SI",
-    "Durcissement Linux / Windows / AD",
+    "Firewalls Stormshield, Fortinet, Cisco",
+    "BGP, DNS, haute disponibilité",
+    "Bastion d'administration",
+    "Durcissement Linux et Windows",
+    "Supervision réseau",
     "Pentest web (OWASP)",
     "Cryptographie",
-    "Droit de la cybersécurité",
+  ],
+  certifications: ["AWS Academy Cloud Foundations (2025)"],
+  languages: "Français (langue maternelle), anglais (B1, technique et professionnel)",
+  projectsTitle: "Projets d'école",
+  schoolProjects: [
+    {
+      period: "ESIEA · 2025 — 2026",
+      title: "Escape game de sensibilisation à la cybersécurité",
+      detail:
+        "En équipe de 8, pour des collégiens : ateliers sur le phishing, les mots de passe, les fake news et le cyberharcèlement, joués dans des collèges. J'ai mené les ateliers phishing et cyberharcèlement, et la relation avec les établissements.",
+    },
+    {
+      period: "IUT · 2025 · 100 heures",
+      title: "Bastion d'accès à privilèges",
+      detail:
+        "Pour la DSI de la ville de La Roche-sur-Yon : conception, déploiement et tests de performance d'un bastion d'administration. J'ai mené le projet, rédigé les guides d'installation et d'utilisation, et présenté les résultats au client.",
+    },
   ],
 }
 
 // Le bureau : alternance
 export const work = {
-  title: "Mon alternance 💼",
-  subtitle: "Le bureau, chez Ecritel.",
-  role: "Apprenti ingénieur réseau — NOC",
+  eyebrow: "2e étage · Le bureau",
+  title: "Mon alternance",
+  role: "Apprenti réseau et sécurité",
   company: "Ecritel",
-  period: "Depuis sept. 2023 · Nantes",
+  companyDetail: "Hébergement cloud et infogérance",
+  period: "Depuis 2023 · Nantes",
   missions: [
-    "Déploiement de clusters de firewalls Stormshield pour des clients : VXLAN, firewalls virtuels sur vCenter ou physiques, supervision",
-    "Migrations d'infrastructures existantes, de la réunion de lancement à l'exécution",
-    "Build de deux clusters Juniper et migration des VM",
-    "Responsable de la conformité clients : adressage IP, configurations, contrats",
+    "Construction de clusters de firewalls Stormshield avec plan de reprise pour les nouveaux clients : de l'environnement VM aux règles de flux, DNS, contrôle d'accès, routage BGP, haute disponibilité et supervision",
+    "Refonte d'infrastructures existantes, dont la migration de firewalls mutualisés vers des clusters dédiés, avec l'équipe système pour la migration des VM",
+    "Configuration et maintenance de switchs, routeurs et firewalls (Stormshield, Fortinet, Cisco) pour les clients hébergés",
   ],
-  tools: ["Stormshield", "Juniper", "Cisco", "BGP · VRF · VXLAN", "VMware vCenter"],
+  tools: ["Stormshield", "Fortinet", "Cisco", "BGP", "Haute disponibilité", "Plan de reprise", "VMware"],
   highlight:
-    "🤖 J'ai créé un agent IA qui, à partir des infos d'un build, génère la checklist et les configurations à pousser (VLAN, routes, VRF, BGP).",
+    "J'ai créé un agent IA qui, à partir des infos d'un build, génère la checklist et les configurations à pousser (VLAN, routes, VRF, BGP).",
 }
 
 export const contact = {
-  title: "On en parle ? 🤙",
-  subtitle: "Réseau, 3D, IA ou simple curiosité : écris-moi.",
+  eyebrow: "Contact",
+  title: "On en parle ?",
+  subtitle: "Réseau, sécurité, 3D, IA ou simple curiosité : écris-moi.",
   links: [
     { label: "CV", value: "PDF, en anglais", href: "/Gabin_Clavier_CV_EN.pdf" },
     { label: "Email", value: "gabin.clv@gmail.com", href: "mailto:gabin.clv@gmail.com" },
@@ -116,6 +134,6 @@ export const contact = {
 
 export const site = {
   url: "https://gabin-clavier.fr",
-  title: `${profile.name} — Portfolio 3D`,
+  title: `${profile.name} — Portfolio`,
   description: `${profile.role}. Un portfolio en 3D : chaque étage raconte une partie de mon parcours.`,
 }

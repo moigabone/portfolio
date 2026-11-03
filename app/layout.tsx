@@ -1,21 +1,22 @@
 import type React from "react"
 import type { Metadata, Viewport } from "next"
-import { Playfair_Display, Poppins } from "next/font/google"
+import { Chakra_Petch, Cormorant_Garamond } from "next/font/google"
 import { site } from "@/content/portfolio"
 import "./globals.css"
 
-const playfair = Playfair_Display({
+// Titres : un serif de grimoire, mais sobre. Texte : la police de mes autres sites.
+const cormorant = Cormorant_Garamond({
   subsets: ["latin"],
   weight: ["600"],
   display: "swap",
-  variable: "--font-playfair",
+  variable: "--font-cormorant",
 })
 
-const poppins = Poppins({
+const chakra = Chakra_Petch({
   subsets: ["latin"],
   weight: ["400", "500", "600"],
   display: "swap",
-  variable: "--font-poppins",
+  variable: "--font-chakra",
 })
 
 export const metadata: Metadata = {
@@ -37,7 +38,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: "#97d9e1",
+  themeColor: "#06051a",
 }
 
 export default function RootLayout({
@@ -46,7 +47,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="fr" className={`${playfair.variable} ${poppins.variable} antialiased`}>
+    <html lang="fr" className={`${cormorant.variable} ${chakra.variable} antialiased`}>
       <body>{children}</body>
     </html>
   )

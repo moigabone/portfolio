@@ -1,7 +1,7 @@
 "use client"
 import { Suspense, useEffect, useState } from "react"
 import { Canvas } from "@react-three/fiber"
-import { Environment, Lightformer, ScrollControls } from "@react-three/drei"
+import { Environment, Lightformer, ScrollControls, Stars } from "@react-three/drei"
 import { NeutralToneMapping } from "three"
 import Apartment from "./Apartment"
 import Overlay from "./Overlay"
@@ -18,15 +18,16 @@ function hasWebGL() {
   }
 }
 
-// Éclairage : lumière du soleil chaude (avec ombres) + ciel bleuté + reflets doux
+// Éclairage de nuit : clair de lune bleuté (avec ombres) + ciel sombre + reflets froids.
+// Les lampes chaudes de chaque pièce sont posées par Apartment.
 function Lights() {
   return (
     <>
-      <hemisphereLight args={["#dff1ff", "#f2d4c4", 1.1]} />
+      <hemisphereLight args={["#5865c8", "#241a3a", 0.55]} />
       <directionalLight
-        position={[9, 16, 10]}
-        color="#fff0d9"
-        intensity={2.4}
+        position={[-9, 16, 10]}
+        color="#b4c2ff"
+        intensity={1.3}
         castShadow
         shadow-mapSize={[2048, 2048]}
         shadow-bias={-0.0004}
@@ -39,10 +40,10 @@ function Lights() {
         shadow-camera-bottom={-11}
       />
       {/* Carte d'environnement générée localement (aucun fichier HDR à télécharger) */}
-      <Environment resolution={256} environmentIntensity={0.5}>
-        <Lightformer form="rect" intensity={3} color="#ffe2c4" position={[6, 6, 8]} scale={[10, 6, 1]} />
-        <Lightformer form="rect" intensity={2} color="#c9e6ff" position={[-8, 4, -6]} scale={[10, 6, 1]} />
-        <Lightformer form="rect" intensity={1.5} color="#ffffff" position={[0, 12, 0]} rotation-x={Math.PI / 2} scale={[12, 12, 1]} />
+      <Environment resolution={256} environmentIntensity={0.3}>
+        <Lightformer form="rect" intensity={2} color="#8f9cff" position={[-6, 6, 8]} scale={[10, 6, 1]} />
+        <Lightformer form="rect" intensity={1.5} color="#ff9fd8" position={[8, 4, -6]} scale={[10, 6, 1]} />
+        <Lightformer form="rect" intensity={1} color="#c9ceff" position={[0, 12, 0]} rotation-x={Math.PI / 2} scale={[12, 12, 1]} />
       </Environment>
     </>
   )
@@ -71,6 +72,7 @@ export default function Experience() {
           onCreated={({ gl }) => (gl.toneMapping = NeutralToneMapping)}
         >
           <Lights />
+          <Stars radius={60} depth={40} count={2500} factor={3} saturation={0} fade speed={reducedMotion ? 0 : 0.4} />
           <ScrollControls pages={NB_SECTIONS} damping={reducedMotion ? 0 : 0.2}>
             <Suspense fallback={null}>
               <Apartment reducedMotion={reducedMotion} />

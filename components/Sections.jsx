@@ -5,20 +5,57 @@ import { profile, projects, education, work, contact } from "@/content/portfolio
 // `right` place la carte à droite (la pièce est alors cadrée à gauche).
 
 const ScrollHint = () => (
-  <p className="mt-6 animate-bounce text-gray-400" aria-hidden="true">
+  <p className="mt-6 animate-bounce text-gilt" aria-hidden="true">
     ↓
   </p>
+)
+
+const Eyebrow = ({ children }) => (
+  <p className="mb-2 text-xs font-semibold uppercase tracking-[0.22em] text-gilt">{children}</p>
+)
+
+const Title = ({ children }) => <h2 className="font-serif text-3xl font-semibold leading-tight text-parchment">{children}</h2>
+
+const Subtitle = ({ children }) => <p className="mt-1 text-ash">{children}</p>
+
+const Label = ({ children }) => (
+  <p className="mt-5 text-xs font-semibold uppercase tracking-[0.18em] text-ash">{children}</p>
 )
 
 const Tags = ({ items }) => (
   <ul className="mt-2 flex flex-wrap gap-2">
     {items.map((item) => (
-      <li key={item} className="rounded-full bg-slate-100 px-3 py-1 text-sm">
+      <li key={item} className="border border-seam px-2.5 py-1 text-xs text-ink">
         {item}
       </li>
     ))}
   </ul>
 )
+
+// Liste à puces dorées, sans emojis
+const Dots = ({ items, className = "" }) => (
+  <ul className={`space-y-1.5 ${className}`}>
+    {items.map((item) => (
+      <li key={item} className="relative pl-4 before:absolute before:left-0 before:top-[0.6em] before:h-1.5 before:w-1.5 before:rotate-45 before:bg-gilt">
+        {item}
+      </li>
+    ))}
+  </ul>
+)
+
+const Timeline = ({ items }) => (
+  <ol className="mt-4 space-y-4 border-l border-seam pl-4">
+    {items.map((e) => (
+      <li key={e.title}>
+        <p className="text-xs uppercase tracking-[0.14em] text-mist">{e.period}</p>
+        <p className="font-semibold text-ink">{e.title}</p>
+        <p className="text-sm text-ash">{e.detail}</p>
+      </li>
+    ))}
+  </ol>
+)
+
+const external = (href) => (href.startsWith("http") || href.endsWith(".pdf") ? { target: "_blank", rel: "noreferrer" } : {})
 
 export const SECTIONS = [
   {
@@ -27,19 +64,15 @@ export const SECTIONS = [
     right: false,
     content: (
       <>
-        <h1 className="font-serif text-3xl font-semibold">Hello, je suis {profile.firstName}</h1>
-        <p className="mt-1 text-gray-500">{profile.role}</p>
+        <Eyebrow>Portfolio</Eyebrow>
+        <h1 className="font-serif text-5xl font-semibold leading-none text-parchment md:text-6xl">{profile.name}</h1>
+        <p className="mt-3 text-ash">{profile.role}</p>
         <p className="mt-4">{profile.tagline}</p>
-        <ul className="mt-3 space-y-2">
-          {profile.highlights.map((h) => (
-            <li key={h}>{h}</li>
-          ))}
-        </ul>
+        <Dots items={profile.highlights} className="mt-4" />
         <a
           href={profile.cv.href}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-5 inline-block rounded-lg bg-slate-900 px-4 py-2 font-semibold text-white transition hover:bg-slate-700"
+          {...external(profile.cv.href)}
+          className="mt-6 inline-block bg-gilt px-4 py-2.5 text-sm font-semibold text-night transition hover:bg-parchment"
         >
           {profile.cv.label} ↓
         </a>
@@ -53,33 +86,25 @@ export const SECTIONS = [
     right: false,
     content: (
       <>
-        <h2 className="font-serif text-2xl font-semibold">{projects.title}</h2>
-        <p className="mt-1 text-gray-500">{projects.subtitle}</p>
+        <Eyebrow>{projects.eyebrow}</Eyebrow>
+        <Title>{projects.title}</Title>
+        <Subtitle>{projects.subtitle}</Subtitle>
         <ul className="mt-4 space-y-3">
-          {projects.items.map((p) => {
-            const body = (
-              <>
-                <p className="font-semibold">
-                  {p.title}
-                  {p.url && " ↗"}
+          {projects.items.map((p) => (
+            <li key={p.title}>
+              <a
+                href={p.url}
+                {...external(p.url)}
+                className="group block border border-seam bg-night/40 p-3 transition hover:border-neon"
+              >
+                <p className="font-semibold text-ink">
+                  {p.title} <span className="text-gilt transition group-hover:text-neon">↗</span>
                 </p>
-                <p className="text-sm text-gray-500">{p.description}</p>
-                <p className="mt-1 hidden text-xs text-gray-400 md:block">{p.tags.join(" · ")}</p>
-              </>
-            )
-            const cardClass = "block rounded-xl border border-slate-200 p-3"
-            return (
-              <li key={p.title}>
-                {p.url ? (
-                  <a href={p.url} target="_blank" rel="noreferrer" className={`${cardClass} transition hover:border-slate-400 hover:bg-slate-50`}>
-                    {body}
-                  </a>
-                ) : (
-                  <div className={cardClass}>{body}</div>
-                )}
-              </li>
-            )
-          })}
+                <p className="text-sm text-ash">{p.description}</p>
+                <p className="mt-1 hidden text-xs text-mist md:block">{p.tags.join(" · ")}</p>
+              </a>
+            </li>
+          ))}
         </ul>
       </>
     ),
@@ -90,15 +115,16 @@ export const SECTIONS = [
     right: true,
     content: (
       <>
-        <h2 className="font-serif text-2xl font-semibold">{projects.afterHours}</h2>
-        <p className="mt-4 font-semibold">Prochains projets</p>
+        <Eyebrow>{projects.eyebrow}</Eyebrow>
+        <Title>{projects.afterHours}</Title>
+        <Label>Prochains projets</Label>
         <Tags items={projects.ideas} />
-        <p className="mt-4 font-semibold">Ce que j'aime</p>
-        <ul className="mt-2 space-y-1 text-sm">
+        <Label>Ce que j'aime</Label>
+        <ul className="mt-2 space-y-1.5 text-sm">
           {projects.hobbies.map((h) => (
             <li key={h.label}>
               {h.href ? (
-                <a href={h.href} target="_blank" rel="noreferrer" className="underline decoration-slate-300 underline-offset-2 hover:decoration-slate-600">
+                <a href={h.href} target="_blank" rel="noreferrer" className="text-link underline decoration-seam underline-offset-4 transition hover:text-neon">
                   {h.label} ↗
                 </a>
               ) : (
@@ -116,69 +142,67 @@ export const SECTIONS = [
     right: false,
     content: (
       <>
-        <h2 className="font-serif text-2xl font-semibold">{education.title}</h2>
-        <p className="mt-1 text-gray-500">{education.subtitle}</p>
-        <ol className="mt-4 space-y-4 border-l-2 border-slate-200 pl-4">
-          {education.items.map((e) => (
-            <li key={e.title}>
-              <p className="text-xs uppercase tracking-wide text-gray-400">{e.period}</p>
-              <p className="font-semibold">{e.title}</p>
-              <p className="text-sm text-gray-500">{e.detail}</p>
-            </li>
-          ))}
-        </ol>
-        <p className="mt-5 font-semibold">Compétences</p>
+        <Eyebrow>{education.eyebrow}</Eyebrow>
+        <Title>{education.title}</Title>
+        <Timeline items={education.items} />
+        <Label>Compétences</Label>
         <Tags items={education.skills} />
-        <p className="mt-4 font-semibold">Certifications</p>
-        <ul className="mt-1 text-sm text-gray-600">
-          {education.certifications.map((c) => (
-            <li key={c}>🏅 {c}</li>
-          ))}
-        </ul>
+        <Label>Certification et langues</Label>
+        <p className="mt-1 text-sm text-ash">{education.certifications.join(", ")}</p>
+        <p className="text-sm text-ash">{education.languages}</p>
+      </>
+    ),
+  },
+  {
+    id: "ecole",
+    room: "classe",
+    right: true,
+    content: (
+      <>
+        <Eyebrow>{education.eyebrow}</Eyebrow>
+        <Title>{education.projectsTitle}</Title>
+        <Timeline items={education.schoolProjects} />
       </>
     ),
   },
   {
     id: "alternance",
     room: "bureau",
-    right: true,
+    right: false,
     content: (
       <>
-        <h2 className="font-serif text-2xl font-semibold">{work.title}</h2>
-        <p className="mt-1 text-gray-500">{work.subtitle}</p>
-        <p className="mt-4 font-semibold">
+        <Eyebrow>{work.eyebrow}</Eyebrow>
+        <Title>{work.title}</Title>
+        <p className="mt-3 font-semibold text-ink">
           {work.role} · {work.company}
         </p>
-        <p className="text-xs uppercase tracking-wide text-gray-400">{work.period}</p>
-        <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm">
-          {work.missions.map((m) => (
-            <li key={m}>{m}</li>
-          ))}
-        </ul>
+        <p className="text-sm text-ash">{work.companyDetail}</p>
+        <p className="text-xs uppercase tracking-[0.14em] text-mist">{work.period}</p>
+        <Dots items={work.missions} className="mt-3 text-sm" />
         <Tags items={work.tools} />
-        <p className="mt-4 rounded-lg bg-slate-100 p-3 text-sm">{work.highlight}</p>
+        <p className="mt-4 border-l-2 border-gilt bg-night/40 p-3 text-sm">{work.highlight}</p>
       </>
     ),
   },
   {
     id: "contact",
     room: null,
-    right: false,
+    right: true,
     content: (
       <>
-        <h2 className="font-serif text-2xl font-semibold">{contact.title}</h2>
-        <p className="mt-1 text-gray-500">{contact.subtitle}</p>
-        <ul className="mt-6 space-y-3">
+        <Eyebrow>{contact.eyebrow}</Eyebrow>
+        <Title>{contact.title}</Title>
+        <Subtitle>{contact.subtitle}</Subtitle>
+        <ul className="mt-6 space-y-2">
           {contact.links.map((l) => (
             <li key={l.label}>
               <a
                 href={l.href}
-                target={l.href.startsWith("http") ? "_blank" : undefined}
-                rel="noreferrer"
-                className="flex justify-between gap-4 rounded-lg bg-slate-100 p-3 transition hover:bg-slate-200"
+                {...external(l.href)}
+                className="flex justify-between gap-4 border border-seam bg-night/40 p-3 transition hover:border-neon"
               >
-                <span className="font-semibold">{l.label}</span>
-                <span className="truncate text-gray-600">{l.value}</span>
+                <span className="font-semibold text-ink">{l.label}</span>
+                <span className="truncate text-ash">{l.value}</span>
               </a>
             </li>
           ))}
@@ -200,7 +224,7 @@ export function Section({ right, children, ref, style }) {
       className={`flex h-dvh flex-col justify-end p-4 md:justify-center md:p-10 ${right ? "md:items-end" : "md:items-start"}`}
     >
       <div className="w-full md:w-1/2 md:max-w-md">
-        <div className="rounded-2xl bg-white/90 px-5 py-5 text-sm shadow-lg backdrop-blur md:px-8 md:py-10 md:text-base">
+        <div className="border border-seam bg-panel px-5 py-5 text-sm text-ink shadow-[0_20px_60px_rgb(0_0_0/0.45)] backdrop-blur-md md:px-8 md:py-9 md:text-base">
           {children}
         </div>
       </div>

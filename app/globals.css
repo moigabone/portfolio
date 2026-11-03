@@ -1,8 +1,19 @@
 @import "tailwindcss";
 
+/* Les couleurs de mes autres sites (Codex Nuit), en version sobre : nuit, or, néon au survol seulement */
 @theme inline {
-  --font-sans: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
-  --font-serif: var(--font-playfair), ui-serif, Georgia, serif;
+  --font-sans: var(--font-chakra), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-cormorant), ui-serif, Georgia, serif;
+  --color-night: #06051a;
+  --color-panel: rgb(10 9 38 / 0.9);
+  --color-seam: #34338a;
+  --color-ink: #ecebff;
+  --color-ash: #b9b6e6;
+  --color-mist: #8f8cc4;
+  --color-parchment: #ffeccc;
+  --color-gilt: #ffd36a;
+  --color-link: #9fb0ff;
+  --color-neon: #ff7ad0;
 }
 
 html,
@@ -12,10 +23,20 @@ body {
   margin: 0;
   padding: 0;
   overflow: hidden;
-  color: #0f172a;
-  background: linear-gradient(0deg, #d9afd9 0%, #97d9e1 100%);
+  color: var(--color-ink);
+  /* Ciel de nuit : la scène 3D est transparente et se dessine par-dessus */
+  background: radial-gradient(120% 80% at 70% 0%, #1c1960 0%, #0d0b35 45%, var(--color-night) 100%);
 }
 
 body {
   font-family: var(--font-sans);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-gilt);
+  outline-offset: 3px;
+}
+
+::selection {
+  background: rgb(255 211 106 / 0.35);
 }

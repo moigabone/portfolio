@@ -20,13 +20,13 @@ export default function Loader() {
     <div
       role="status"
       aria-live="polite"
-      className={`fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-gradient-to-t from-[#d9afd9] to-[#97d9e1] transition-opacity duration-500 ${done ? "opacity-0" : "opacity-100"}`}
+      className={`fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-night transition-opacity duration-500 ${done ? "opacity-0" : "opacity-100"}`}
     >
-      <p className="font-serif text-2xl font-semibold">Chargement…</p>
-      <div className="h-1.5 w-48 overflow-hidden rounded-full bg-white/50">
-        <div className="h-full bg-slate-800 transition-[width] duration-200" style={{ width: `${progress}%` }} />
+      <p className="font-serif text-3xl font-semibold text-parchment">Gabin Clavier</p>
+      <div className="h-px w-48 overflow-hidden bg-seam">
+        <div className="h-full bg-gilt transition-[width] duration-200" style={{ width: `${progress}%` }} />
       </div>
-      <p className="text-sm text-slate-700">{Math.round(progress)} %</p>
+      <p className="text-xs uppercase tracking-[0.22em] text-ash">{Math.round(progress)} %</p>
     </div>
   )
 }
