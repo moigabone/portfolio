@@ -23,8 +23,13 @@ Tout le texte du site se trouve dans [`content/portfolio.js`](content/portfolio.
 
 | Fichier | Rôle |
 | --- | --- |
-| `components/Experience.jsx` | Canvas 3D, éclairage, scroll ; bascule sur une version statique sans WebGL |
-| `components/Apartment.jsx` | Modèle 3D, couleurs, et caméra qui cadre chaque pièce selon le scroll (réglages en haut du fichier) |
+| `components/Experience.jsx` | Canvas 3D, éclairage jour / nuit, scroll, boutons ; bascule sur une version statique sans WebGL |
+| `components/Apartment.jsx` | Modèle 3D, caméra qui cadre chaque pièce, mouvement des étages, décor animé, clics (réglages en haut du fichier) |
+| `components/Person.js` | Le personnage d'après mon Bitmoji et ses gestes (frappe, regard caméra, coucou) |
+| `components/Cat.js` | Le chat de la chambre |
+| `components/Screens.js` | Les écrans vivants : terminal, règles de firewall, mes sites (`public/screens/`), slides |
+| `components/Elevator.jsx` | Le panneau d'ascenseur pour aller d'un étage à l'autre |
+| `components/Controls.jsx`, `ambient.js`, `theme.js` | Interrupteur soleil / lune (heure de Paris par défaut) et ambiance sonore générée |
 | `components/Overlay.jsx` | Fondu des cartes selon la position du scroll |
 | `components/Sections.jsx` | Contenu et mise en page des cartes (une section = une page de scroll) |
 | `components/Loader.jsx` | Écran de chargement du modèle |

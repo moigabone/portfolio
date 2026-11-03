@@ -24,8 +24,12 @@ body {
   padding: 0;
   overflow: hidden;
   color: var(--color-ink);
-  /* Ciel de nuit : la scène 3D est transparente et se dessine par-dessus */
-  background: radial-gradient(120% 80% at 70% 0%, #1c1960 0%, #0d0b35 45%, var(--color-night) 100%);
+}
+
+/* Ciel de nuit, sur html seulement : le ciel de jour et les étoiles filantes (z-index -1) passent au-dessus,
+   et la scène 3D, transparente, se dessine par-dessus le tout */
+html {
+  background: radial-gradient(120% 80% at 70% 0%, #1c1960 0%, #0d0b35 45%, var(--color-night) 100%) fixed;
 }
 
 body {
@@ -70,4 +74,54 @@ body::after {
   1% { opacity: 1; }
   6% { opacity: 0; transform: rotate(-24deg) translateX(-420px); }
   100% { opacity: 0; transform: rotate(-24deg) translateX(-420px); }
+}
+
+/* Ciel de jour, en fondu par-dessus le ciel de nuit */
+.sky-day {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(180deg, #5fb2f5 0%, #9fd2ff 45%, #e8f4ff 100%);
+  opacity: 0;
+  transition: opacity 1.5s ease;
+  pointer-events: none;
+}
+html[data-theme="day"] .sky-day { opacity: 1; }
+html[data-theme="day"] body::before,
+html[data-theme="day"] body::after { display: none; }
+
+/* À l'arrivée, la carte d'accueil apparaît après la chute des pièces */
+@media (prefers-reduced-motion: no-preference) {
+  .card-intro { animation: card-in 0.9s 1.6s both ease-out; }
+}
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Bulle du personnage */
+.bubble {
+  position: relative;
+  max-width: 15rem;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--color-gilt);
+  background: rgb(10 9 38 / 0.94);
+  color: var(--color-ink);
+  font-size: 0.85rem;
+  line-height: 1.4;
+  white-space: normal;
+  width: max-content;
+  pointer-events: none;
+}
+.bubble::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  width: 12px;
+  height: 12px;
+  background: inherit;
+  border-right: 1px solid var(--color-gilt);
+  border-bottom: 1px solid var(--color-gilt);
+  transform: translateX(-50%) rotate(45deg);
 }

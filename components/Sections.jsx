@@ -76,6 +76,7 @@ export const SECTIONS = [
         >
           {profile.cv.label} ↓
         </a>
+        <p className="mt-5 text-xs text-ash">Astuce : clique sur moi et sur les objets des pièces.</p>
         <ScrollHint />
       </>
     ),
@@ -218,15 +219,15 @@ export const NB_SECTIONS = SECTIONS.length
 
 // h-dvh et non h-screen : sur mobile, 100vh ignore la barre d'adresse et chaque section dépasserait
 // d'une page de scroll, au point de rendre la dernière inaccessible
-export function Section({ right, children, ref, style }) {
+export function Section({ id, right, children, ref, style }) {
   return (
     <section
       ref={ref}
       style={style}
-      className={`flex h-dvh flex-col justify-end p-4 md:justify-center md:p-10 ${right ? "md:items-end" : "md:items-start"}`}
+      className={`flex h-dvh flex-col justify-end p-4 md:justify-center md:p-10 md:pr-24 ${right ? "md:items-end" : "md:items-start"}`}
     >
       <div className="w-full md:w-1/2 md:max-w-md">
-        <div className="border border-seam bg-panel px-5 py-5 text-sm text-ink shadow-[0_20px_60px_rgb(0_0_0/0.45)] backdrop-blur-md md:px-8 md:py-9 md:text-base">
+        <div data-card className={`${id === "intro" ? "card-intro " : ""}border border-seam bg-panel px-5 py-5 text-sm text-ink shadow-[0_20px_60px_rgb(0_0_0/0.45)] backdrop-blur-md md:px-8 md:py-9 md:text-base`}>
           {children}
         </div>
       </div>

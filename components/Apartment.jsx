@@ -1,6 +1,6 @@
 "use client"
-import { useMemo, useRef } from "react"
-import { useGLTF, useScroll } from "@react-three/drei"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { Html, useGLTF, useScroll } from "@react-three/drei"
 import { useFrame, useThree } from "@react-three/fiber"
 import {
   AdditiveBlending,
@@ -23,6 +23,10 @@ import {
 } from "three"
 import { SECTIONS, NB_SECTIONS } from "./Sections"
 import { animatePerson, makePerson, setOpacity } from "./Person"
+import { animateCat, makeCat } from "./Cat"
+import { drawScreens, installScreens, screenContents } from "./Screens"
+import { scrollToSection } from "./Elevator"
+import { DAYLIGHT_SPEED } from "./theme"
 
 const MODEL_URL = "/models/appart.glb"
 const MODEL_ROTATION = -Math.PI / 3
@@ -52,12 +56,30 @@ const LAMP = { color: "#ffb46b", intensity: 6, reach: 1.7 } // reach : portée, 
 const POSTER = { room: "chambre", material: "Matériau.027", vertices: 12 } // devient une bannière brodée
 const BEDSIDE_LAMP = { room: "chambre", material: "Matériau.027", vertices: 691 } // l'abat-jour s'allume
 const PLANTS = { material: "Matériau.022", vertices: 560 } // les feuilles se balancent
+const GLOBE = { material: "Matériau.008", vertices: 582 } // tourne, plus vite au survol
+const ECRITEL_LOGO = { material: "", vertices: 4 } // l'affiche du bureau : un clic mène à l'alternance
 const CHAIRS = {
   chambre: { material: "Matériau.041", vertices: 3311, scale: 1.2 }, // la chaise de la chambre est petite : on le grandit un peu
   classe: { material: "Matériau.015", vertices: 328 },
   bureau: { material: "Matériau.041", vertices: 3311 },
 }
 const DESK_HEIGHT = 0.75 // en mètres : sert à mettre le personnage à l'échelle de chaque pièce
+
+// Le chat : avancé vers le visiteur depuis le centre de la chambre, tourné vers lui
+const CAT = { forward: 0.9, facing: -Math.PI / 2.4, scale: 2, awakeSeconds: 4 }
+
+// Interactions : ce que dit le personnage quand on clique sur lui, selon la pièce
+const PHRASES = {
+  chambre: "Ici, je code mes projets du soir, souvent avec Claude Code.",
+  classe: "4e année à l'ESIEA, majeure cybersécurité. Diplôme en 2028 !",
+  bureau: "Chez Ecritel, je construis des clusters de firewalls pour les clients.",
+}
+const BUBBLE_SECONDS = 4
+const WAVE_SECONDS = 3
+const PICK_DEPTH = 4 // objets les plus proches examinés sous la souris
+
+// Arrivée : les pièces tombent du ciel l'une après l'autre (secondes, hauteur en rayons de pièce)
+const INTRO = { delay: 0.9, stagger: 0.3, duration: 1.3, height: 2.5 }
 
 const sphereOf = (object) => new Box3().setFromObject(object).getBoundingSphere(new Sphere())
 const findMesh = (root, { material, vertices }) => {
@@ -142,12 +164,14 @@ function hangBanner(room) {
   return banner
 }
 
-// Place un objet sur un pivot au bas de sa boîte, pour le faire pivoter depuis sa base (plante dans son pot)
-function pivotAtBase(mesh) {
+// Place un objet sur un pivot, au bas de sa boîte (plante qui se balance dans son pot)
+// ou en son centre (globe qui tourne sur lui-même)
+function pivotAt(mesh, where) {
   mesh.geometry.computeBoundingBox()
   const box = mesh.geometry.boundingBox
   const pivot = new Object3D()
-  pivot.position.set((box.min.x + box.max.x) / 2, box.min.y, (box.min.z + box.max.z) / 2).applyMatrix4(mesh.matrix)
+  const y = where === "base" ? box.min.y : (box.min.y + box.max.y) / 2
+  pivot.position.set((box.min.x + box.max.x) / 2, y, (box.min.z + box.max.z) / 2).applyMatrix4(mesh.matrix)
   mesh.parent.add(pivot)
   pivot.updateMatrixWorld(true)
   pivot.attach(mesh)
@@ -208,6 +232,7 @@ function makeDust(room, count = 36) {
     geometry,
     new PointsMaterial({ color: "#ffd36a", size: 0.045, transparent: true, opacity: 0.7, depthWrite: false, blending: AdditiveBlending }),
   )
+  dust.raycast = () => {} // la poussière ne doit pas capter les clics
   room.attach(dust)
   // Positions de départ dans le repère de la pièce, autour desquelles chaque grain dérive
   dust.updateMatrixWorld(true)
@@ -261,11 +286,21 @@ function frame(shot, sphere, camera, size, axes, out) {
 
 const makeView = () => ({ target: new Vector3(), position: new Vector3(), distance: 0 })
 const WORLD_UP = new Vector3(0, 1, 0)
+const ease = (x) => 1 - (1 - Math.min(1, Math.max(0, x))) ** 3
+const pulse = (dt, length) => MathUtils.smoothstep(dt, 0, 0.4) - MathUtils.smoothstep(dt, length - 0.6, length)
 
-export default function Apartment({ reducedMotion = false }) {
+// L'objet cliquable touché : on remonte jusqu'au parent qui porte l'action
+const actionOf = (object) => {
+  for (let o = object; o; o = o.parent) if (o.userData.action) return o.userData.action
+  return null
+}
+
+export default function Apartment({ reducedMotion = false, day = false }) {
   const scroll = useScroll()
-  const { camera, size, pointer } = useThree()
+  const { camera, size, pointer, clock, gl } = useThree()
   const { scene } = useGLTF(MODEL_URL)
+  const [bubble, setBubble] = useState(null)
+  const anchor = useRef()
   const state = useRef({
     a: makeView(),
     b: makeView(),
@@ -275,9 +310,17 @@ export default function Apartment({ reducedMotion = false }) {
     spheres: ROOMS.map(() => new Sphere()),
     overview: new Sphere(),
     offset: new Vector3(),
+    scale: new Vector3(),
+    introStart: null,
+    daylight: day ? 1 : 0,
+    hover: null,
+    attention: ROOMS.map(() => 0),
+    waves: ROOMS.map(() => -99),
+    catWake: -99,
+    globeSpin: 0,
   })
 
-  // Prépare le modèle une seule fois : centrage, ombres, couleurs, décor animé et personnage
+  // Prépare le modèle une seule fois : centrage, ombres, couleurs, décor animé, personnage et chat
   const world = useMemo(() => {
     // useGLTF garde la scène en cache : on ne la prépare qu'une fois, même si le composant remonte
     if (!scene.userData.world) {
@@ -287,18 +330,15 @@ export default function Apartment({ reducedMotion = false }) {
       scene.position.sub(new Box3().setFromObject(scene).getCenter(new Vector3()))
       scene.updateMatrixWorld(true)
 
-      let screen = null
       scene.traverse((child) => {
         if (!child.isMesh) return
         child.castShadow = true
         child.receiveShadow = true
         const material = child.material
-        if (material.name === SCREEN_MATERIAL) screen = material
         if (material.userData.graded) return
         const hsl = {}
         material.color.getHSL(hsl)
         material.color.setHSL(hsl.h, Math.min(1, hsl.s * SATURATION), hsl.l)
-        if (material.name === SCREEN_MATERIAL) material.emissive.set("#5f7dff")
         material.userData.graded = true
       })
 
@@ -308,9 +348,21 @@ export default function Apartment({ reducedMotion = false }) {
         const lamp = new PointLight(LAMP.color, LAMP.intensity, sphere.radius * LAMP.reach, 2)
         lamp.position.copy(sphere.center).add(new Vector3(0, sphere.radius * 0.1, sphere.radius * 0.15))
         object.attach(lamp)
-        return { name, object, sphere, base: object.position.clone(), dust: makeDust(object) }
+        return { name, object, sphere, lamp, base: object.position.clone(), dust: makeDust(object) }
       })
-      const chambre = rooms[0].object
+      const [chambre, , bureau] = rooms.map((r) => r.object)
+
+      // Le personnage d'abord : il se repère aux écrans, qui changent de matériau juste après
+      const people = rooms.map((r, k) => {
+        const person = seatPerson(r.object, CHAIRS[r.name])
+        if (person) person.root.userData.action = { type: "person", room: k }
+        return person
+      })
+
+      // Écrans vivants
+      const images = ["codex", "veille", "carte"].map((name) => Object.assign(new Image(), { src: `/screens/${name}.jpg` }))
+      const contents = screenContents(images)
+      const screens = rooms.flatMap((r) => installScreens(r.object, r.sphere.center, contents[r.name], SCREEN_MATERIAL))
 
       // L'abat-jour de la chambre s'allume, avec sa propre petite lumière
       let bedside = null
@@ -318,28 +370,41 @@ export default function Apartment({ reducedMotion = false }) {
       if (shade) {
         shade.material = shade.material.clone()
         shade.material.emissive.set("#ffb46b")
-        shade.material.emissiveIntensity = 0.8
         const glow = new PointLight("#ffb46b", 1.5, 2.5, 2)
         glow.position.copy(new Box3().setFromObject(shade).getCenter(new Vector3()))
         chambre.attach(glow)
         bedside = { material: shade.material, light: glow }
       }
 
-      const plants = []
-      for (const room of rooms) {
-        const leaves = findMesh(room.object, PLANTS)
-        if (leaves) plants.push(pivotAtBase(leaves))
-      }
+      const plants = rooms.map((r) => findMesh(r.object, PLANTS)).filter(Boolean).map((m) => pivotAt(m, "base"))
+      const globes = rooms
+        .map((r) => findMesh(r.object, GLOBE))
+        .filter(Boolean)
+        .map((m) => {
+          m.userData.action = { type: "globe" }
+          return pivotAt(m, "center")
+        })
+      const logo = findMesh(bureau, ECRITEL_LOGO)
+      if (logo) logo.userData.action = { type: "ecritel" }
 
-      scene.userData.world = {
-        rooms,
-        screen,
-        bedside,
-        plants,
-        banner: hangBanner(chambre),
-        people: rooms.map((r) => seatPerson(r.object, CHAIRS[r.name])),
-        overview: sphereOf(scene),
-      }
+      const banner = hangBanner(chambre)
+      if (banner) banner.userData.action = { type: "banner" }
+
+      // Le chat dort sur le tapis, au milieu de la chambre, côté visiteur
+      const cat = makeCat()
+      const floor = new Box3().setFromObject(findMesh(chambre, CHAIRS.chambre)).min.y
+      const spot = new Box3()
+        .setFromObject(chambre)
+        .getCenter(new Vector3())
+        .add(new Vector3(VIEW_DIRECTION.x, 0, VIEW_DIRECTION.z).normalize().multiplyScalar(CAT.forward))
+      cat.root.position.set(spot.x, floor, spot.z)
+      cat.root.rotation.y = CAT.facing
+      cat.root.scale.setScalar(CAT.scale)
+      cat.root.userData.action = { type: "cat" }
+      cat.root.updateMatrixWorld(true)
+      chambre.attach(cat.root)
+
+      scene.userData.world = { rooms, people, screens, bedside, plants, globes, banner, cat, overview: sphereOf(scene) }
     }
 
     const { rooms, overview } = scene.userData.world
@@ -359,10 +424,67 @@ export default function Apartment({ reducedMotion = false }) {
     return { ...scene.userData.world, rooms, overview, shots, towardCamera }
   }, [scene])
 
-  useFrame(({ clock }, delta) => {
+  // La bulle disparaît après quelques secondes
+  useEffect(() => {
+    if (!bubble) return
+    const timer = setTimeout(() => setBubble(null), BUBBLE_SECONDS * 1000)
+    return () => clearTimeout(timer)
+  }, [bubble])
+  useEffect(() => () => void (document.body.style.cursor = ""), [])
+
+  // Survol et clics sur la scène ; on ignore ce qui se passe au-dessus des cartes de texte et des boutons
+  // R3F appelle le gestionnaire pour chaque objet traversé : on ne traite que le premier passage.
+  // Parmi les objets les plus proches, le premier cliquable gagne (la chaise ne cache pas le personnage).
+  const pick = (e) => {
+    e.stopPropagation()
+    if (e.nativeEvent.target?.closest?.("[data-card], nav, button, a")) return null
+    for (const hit of e.intersections.slice(0, PICK_DEPTH)) {
+      const action = actionOf(hit.object)
+      if (action) return action
+    }
+    return null
+  }
+  const onPointerMove = (e) => {
+    const action = pick(e)
+    state.current.hover = action
+    document.body.style.cursor = action ? "pointer" : ""
+  }
+  const onPointerLeave = () => {
+    state.current.hover = null
+    document.body.style.cursor = ""
+  }
+  const onClick = (e) => {
+    const action = pick(e)
+    if (!action) return
+    const now = clock.elapsedTime
     const s = state.current
-    const time = reducedMotion ? 0 : clock.elapsedTime
+    if (action.type === "person") {
+      s.waves[action.room] = now
+      setBubble({ text: PHRASES[ROOMS[action.room]], target: "person", room: action.room, at: now })
+    } else if (action.type === "cat") {
+      s.catWake = now
+      setBubble({ text: "Miaou ?", target: "cat", at: now })
+    } else if (action.type === "globe") {
+      s.globeSpin = 1
+    } else if (action.type === "banner") {
+      window.open("https://links.gabin-clavier.fr", "_blank", "noopener")
+    } else if (action.type === "ecritel") {
+      scrollToSection(scroll.el, "alternance")
+    }
+  }
+
+  useFrame((_, delta) => {
+    const s = state.current
+    const now = clock.elapsedTime
+    const time = reducedMotion ? 0 : now
     const { rooms, shots, people } = world
+
+    // Nuit ou jour : la scène glisse doucement d'un réglage à l'autre
+    s.daylight = reducedMotion ? (day ? 1 : 0) : MathUtils.damp(s.daylight, day ? 1 : 0, DAYLIGHT_SPEED, delta)
+    const night = 1 - s.daylight
+
+    // Arrivée : les pièces tombent du ciel l'une après l'autre, une fois l'écran de chargement parti
+    s.introStart ??= now + INTRO.delay
 
     // Position entre deux sections, adoucie pour marquer une pause sur chaque pièce
     const position = scroll.offset * (NB_SECTIONS - 1)
@@ -381,11 +503,13 @@ export default function Apartment({ reducedMotion = false }) {
       const pull = (focus(k) - spread * 0.5) * PULL * r
       s.offset.copy(world.towardCamera).multiplyScalar(pull)
       s.offset.y += lift
-      // Sphère de cadrage : sans le flottement, pour que la caméra reste posée
+      // Sphère de cadrage : sans le flottement ni la chute, pour que la caméra reste posée
       s.spheres[k].center.copy(room.sphere.center).add(s.offset.clone().applyAxisAngle(WORLD_UP, MODEL_ROTATION))
       s.spheres[k].radius = r
       s.offset.y += Math.sin(time * 0.5 + k * 2.1) * FLOAT * r
+      if (!reducedMotion) s.offset.y += (1 - ease((now - s.introStart - k * INTRO.stagger) / INTRO.duration)) * INTRO.height * r
       room.object.position.copy(room.base).add(s.offset)
+      room.lamp.intensity = LAMP.intensity * (0.15 + 0.85 * night)
     })
     s.overview.center.copy(world.overview.center)
     s.overview.radius = world.overview.radius * (1 + spread * SPREAD * 0.5)
@@ -411,32 +535,68 @@ export default function Apartment({ reducedMotion = false }) {
     }
     camera.lookAt(s.lookAt)
 
-    // Le personnage apparaît dans la pièce visitée et s'efface de celle qu'on quitte
+    // Le personnage apparaît dans la pièce visitée ; survolé, il regarde le visiteur ; cliqué, il fait coucou
     people.forEach((person, k) => {
       if (!person) return
       setOpacity(person, MathUtils.smoothstep(presence(k), 0.15, 0.85))
-      if (person.root.visible) animatePerson(person, time, k * 3.7, reducedMotion ? null : camera.position)
+      const hovered = s.hover?.type === "person" && s.hover.room === k
+      s.attention[k] = MathUtils.damp(s.attention[k], hovered ? 1 : 0, 4, delta)
+      const wave = reducedMotion ? 0 : pulse(now - s.waves[k], WAVE_SECONDS)
+      if (person.root.visible) animatePerson(person, time, k * 3.7, reducedMotion ? null : camera.position, { attention: s.attention[k], wave })
     })
 
-    // Décor : plantes, bannière, écrans, lampe de chevet, poussière
+    // Le chat se réveille quand on clique dessus, ou quand le personnage de la chambre se retourne
+    const turned = Math.max(s.attention[0], pulse(now - s.waves[0], WAVE_SECONDS))
+    animateCat(world.cat, time, reducedMotion ? 0 : Math.max(pulse(now - s.catWake, CAT.awakeSeconds), turned * 0.6))
+
+    // Bulle au-dessus du personnage ou du chat
+    if (bubble && anchor.current) {
+      const target = bubble.target === "cat" ? world.cat.head : people[bubble.room]?.parts.head
+      if (target) {
+        target.getWorldPosition(anchor.current.position)
+        anchor.current.position.y += target.getWorldScale(s.scale).y * (bubble.target === "cat" ? 0.25 : 0.32)
+      }
+    }
+
+    // Décor : plantes, globes, bannière, écrans, lampe de chevet, poussière
     world.plants.forEach((p, k) => {
       p.rotation.z = Math.sin(time * 0.8 + k) * 0.05
       p.rotation.x = Math.sin(time * 0.6 + k * 2) * 0.035
     })
+    s.globeSpin = MathUtils.damp(s.globeSpin, s.hover?.type === "globe" ? 0.5 : 0, 1.2, delta)
+    if (!reducedMotion) world.globes.forEach((g) => (g.rotation.y += delta * (0.25 + s.globeSpin * 8)))
     if (world.banner) {
       world.banner.rotation.x = -(0.5 + 0.5 * Math.sin(time * 0.7)) * 0.08
       world.banner.rotation.z = Math.sin(time * 0.45) * 0.015
     }
-    if (world.screen) world.screen.emissiveIntensity = 0.65 + Math.sin(time * 0.9) * 0.08
+    drawScreens(world.screens, time, now)
+    for (const screen of world.screens) screen.material.color.setScalar(0.8 + 0.2 * night)
     if (world.bedside) {
       const flicker = 1 + Math.sin(time * 2.3) * 0.04 + Math.sin(time * 5.1) * 0.025
-      world.bedside.light.intensity = 1.5 * flicker
-      world.bedside.material.emissiveIntensity = 0.8 * flicker
+      world.bedside.light.intensity = 1.5 * flicker * night
+      world.bedside.material.emissiveIntensity = 0.8 * flicker * night
     }
-    if (!reducedMotion) rooms.forEach((room) => animateDust(room.dust, time))
+    rooms.forEach((room) => {
+      room.dust.points.material.opacity = 0.7 * (0.3 + 0.7 * night)
+      if (!reducedMotion) animateDust(room.dust, time)
+    })
   })
 
-  return <primitive object={scene} />
+  return (
+    <>
+      <primitive object={scene} onPointerMove={onPointerMove} onPointerLeave={onPointerLeave} onClick={onClick} />
+      {bubble && (
+        <group ref={anchor}>
+          {/* Dans le calque fixe de la scène, pas dans le conteneur qui défile */}
+          <Html center portal={{ current: gl.domElement.parentNode }} zIndexRange={[35, 0]} style={{ pointerEvents: "none" }}>
+            <div className="bubble" role="status">
+              {bubble.text}
+            </div>
+          </Html>
+        </group>
+      )}
+    </>
+  )
 }
 
 useGLTF.preload(MODEL_URL)

@@ -27,7 +27,7 @@ export default function Overlay() {
     <Scroll html>
       <div className="w-screen">
         {SECTIONS.map((s, i) => (
-          <Section key={s.id} right={s.right} ref={(el) => (sections.current[i] = el)}>
+          <Section key={s.id} id={s.id} right={s.right} ref={(el) => (sections.current[i] = el)}>
             {s.content}
           </Section>
         ))}
