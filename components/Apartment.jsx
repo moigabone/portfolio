@@ -53,7 +53,7 @@ const POSTER = { room: "chambre", material: "Matériau.027", vertices: 12 } // d
 const BEDSIDE_LAMP = { room: "chambre", material: "Matériau.027", vertices: 691 } // l'abat-jour s'allume
 const PLANTS = { material: "Matériau.022", vertices: 560 } // les feuilles se balancent
 const CHAIRS = {
-  chambre: { material: "Matériau.041", vertices: 3311 },
+  chambre: { material: "Matériau.041", vertices: 3311, scale: 1.2 }, // la chaise de la chambre est petite : on le grandit un peu
   classe: { material: "Matériau.015", vertices: 328 },
   bureau: { material: "Matériau.041", vertices: 3311 },
 }
@@ -178,12 +178,14 @@ function seatPerson(room, chairSpec) {
   const screenCenter = screen.reduce((sum, p) => sum.add(p), new Vector3()).divideScalar(screen.length)
   // Le bas des écrans repose sur le bureau : de quoi en déduire l'échelle de la pièce
   const deskTop = Math.min(...screen.map((p) => p.y)) - 0.15
-  const scale = (deskTop - seat.min.y) / DESK_HEIGHT
+  const scale = ((deskTop - seat.min.y) / DESK_HEIGHT) * (chairSpec.scale ?? 1)
   const facing = flat(screenCenter).sub(flat(center)).normalize()
 
   const person = makePerson()
   person.root.scale.setScalar(scale)
-  person.root.position.set(center.x, seat.min.y, center.z).addScaledVector(facing, -0.06 * scale)
+  // Agrandi, il garde les hanches sur l'assise : ses pieds passent sous le tapis
+  const sink = (scale - scale / (chairSpec.scale ?? 1)) * 0.5
+  person.root.position.set(center.x, seat.min.y - sink, center.z).addScaledVector(facing, -0.06 * scale)
   person.root.rotation.y = Math.atan2(facing.x, facing.z)
   person.root.updateMatrixWorld(true)
   room.attach(person.root)
@@ -413,7 +415,7 @@ export default function Apartment({ reducedMotion = false }) {
     people.forEach((person, k) => {
       if (!person) return
       setOpacity(person, MathUtils.smoothstep(presence(k), 0.15, 0.85))
-      if (person.root.visible) animatePerson(person, time, k * 3.7)
+      if (person.root.visible) animatePerson(person, time, k * 3.7, reducedMotion ? null : camera.position)
     })
 
     // Décor : plantes, bannière, écrans, lampe de chevet, poussière

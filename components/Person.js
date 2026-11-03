@@ -35,34 +35,32 @@ function part(geometry, material, [x, y, z], scale) {
   return mesh
 }
 
-// Cheveux ondulés : une calotte collée au crâne, couverte de mèches rondes posées à sa surface.
-// Le visage reste dégagé, sauf une frange qui tombe sur le haut du front.
+// Cheveux ondulés : une seule coque lisse autour du crâne, avec du volume sur le dessus,
+// des ondulations douces et un bord irrégulier (frange sur le front, court au-dessus des oreilles, plus long à la nuque)
 function hair(material) {
-  const group = new Group()
-  const cap = new Mesh(new SphereGeometry(0.104, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.5), material)
-  cap.scale.set(0.95, 1.12, 1.03)
-  cap.position.set(0, 0.012, -0.004)
-  cap.rotation.x = -0.25
-  group.add(cap)
-  const curl = new SphereGeometry(1, 10, 8)
-  const surface = (polar, around, d) =>
-    [Math.sin(polar) * Math.sin(around) * d * 0.95, Math.cos(polar) * d * 1.12 + 0.01, Math.sin(polar) * Math.cos(around) * d - 0.005]
-  // Couronnes de mèches, de l'arrière vers le front ; pas de mèches sur le visage ni sur les oreilles
-  for (const [polar, count, r] of [[0.15, 3, 0.04], [0.55, 9, 0.038], [0.95, 12, 0.036], [1.35, 10, 0.034]]) {
-    for (let i = 0; i < count; i++) {
-      const around = (i / count) * Math.PI * 2 + polar
-      const front = Math.cos(around)
-      if (polar > 0.9 && front > 0.35) continue // le front et les yeux
-      if (polar > 1.2 && Math.abs(Math.sin(around)) > 0.8) continue // les oreilles
-      group.add(part(curl, material, surface(polar, around, 0.1), [r, r * 0.8, r]))
-    }
+  const geometry = new SphereGeometry(1, 64, 32, 0, Math.PI * 2, 0, Math.PI * 0.72)
+  const pos = geometry.attributes.position
+  const v = new Vector3()
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i).normalize()
+    const around = Math.atan2(v.x, v.z) // 0 : le front
+    const front = Math.cos(around)
+    // Limite des cheveux, en angle depuis le sommet du crâne
+    const fringe = Math.exp(-(((around - 0.35) / 0.4) ** 2)) * 0.07 * Math.PI // mèche qui tombe sur le front
+    const line = Math.PI * (0.5 - 0.13 * front) + fringe + Math.sin(around * 9) * 0.025 * Math.PI
+    const polar = Math.min(Math.acos(clamp(v.y)), line)
+    const wave = Math.sin(around * 7 + polar * 9) * 0.035 + Math.sin(around * 13 - polar * 5) * 0.015
+    const r = 0.104 * (1 + wave + Math.cos(polar) * 0.14)
+    pos.setXYZ(i, Math.sin(polar) * Math.sin(around) * r, Math.cos(polar) * r, Math.sin(polar) * Math.cos(around) * r)
   }
-  // Frange ondulée sur le haut du front
-  for (const [x, y, r] of [[-0.045, 0.06, 0.03], [-0.012, 0.068, 0.032], [0.022, 0.064, 0.03], [0.052, 0.054, 0.026]]) {
-    group.add(part(curl, material, [x, y, 0.082], [r, r * 0.7, r * 0.75]))
-  }
-  return group
+  geometry.computeVertexNormals()
+  const mesh = new Mesh(geometry, material)
+  mesh.scale.set(0.95, 1.1, 1.02) // suit la forme de la tête
+  mesh.position.set(0, 0.006, -0.004)
+  return mesh
 }
+
+const clamp = (x) => Math.max(-1, Math.min(1, x))
 
 function face(m) {
   const group = new Group()
@@ -153,18 +151,46 @@ export function makePerson() {
     if (child.isMesh) child.castShadow = true
   })
 
-  return { root, parts: { torso, head, forearms }, materials: Object.values(m) }
+  // Position de la tête au repos, dans le repère du personnage : point de départ du regard
+  const headRest = new Vector3(0, 0.5 + 0.77, 0.02 + 0.77 * Math.sin(0.12))
+  return { root, parts: { torso, head, forearms, headRest }, materials: Object.values(m) }
 }
 
 // Petits gestes en boucle : respiration, frappe au clavier, regard qui se promène
-export function animatePerson({ parts }, time, phase) {
+// De temps en temps, il se retourne vers le visiteur : quelques secondes toutes les 12 secondes
+const GLANCE = { every: 12, start: 2, hold: 3, ease: 0.9 }
+const smooth = (a, b, x) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)))
+  return t * t * (3 - 2 * t)
+}
+const toCamera = new Vector3()
+
+// Petits gestes en boucle : respiration, frappe au clavier, regard qui se promène, coup d'œil à la caméra
+export function animatePerson({ root, parts }, time, phase, camera) {
   const t = time + phase
+  const c = time % GLANCE.every
+  const glance = camera ? smooth(GLANCE.start, GLANCE.start + GLANCE.ease, c) - smooth(GLANCE.start + GLANCE.hold, GLANCE.start + GLANCE.hold + GLANCE.ease, c) : 0
+
+  // Direction de la caméra vue depuis la tête, dans le repère du personnage
+  let yaw = 0, pitch = 0
+  if (glance > 0) {
+    root.worldToLocal(toCamera.copy(camera)).sub(parts.headRest)
+    yaw = Math.atan2(toCamera.x, toCamera.z)
+    pitch = -Math.atan2(toCamera.y, Math.hypot(toCamera.x, toCamera.z))
+  }
+  // Le buste pivote un peu, la tête fait le reste (jusqu'à un tour d'épaule)
+  const twist = Math.max(-0.5, Math.min(0.5, yaw * 0.3))
+  const turn = Math.max(-1.4, Math.min(1.4, yaw - twist))
+
   parts.torso.rotation.x = 0.12 + Math.sin(t * 1.4) * 0.012
+  parts.torso.rotation.y = twist * glance
   parts.forearms.forEach((f, i) => {
-    f.rotation.x = Math.max(0, Math.sin(t * 7 + i * 2.1)) * -0.07
+    f.rotation.x = Math.max(0, Math.sin(t * 7 + i * 2.1)) * -0.07 * (1 - glance)
   })
-  parts.head.rotation.y = Math.sin(t * 0.35) * 0.3 + Math.sin(t * 0.13) * 0.15
-  parts.head.rotation.x = 0.08 + Math.sin(t * 0.27) * 0.06
+  const idleYaw = Math.sin(t * 0.35) * 0.3 + Math.sin(t * 0.13) * 0.15
+  const idlePitch = 0.08 + Math.sin(t * 0.27) * 0.06
+  parts.head.rotation.y = idleYaw + (turn - idleYaw) * glance
+  parts.head.rotation.x = idlePitch + (Math.max(-0.5, Math.min(0.3, pitch)) - idlePitch) * glance
 }
 
 export function setOpacity(person, opacity) {
