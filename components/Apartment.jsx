@@ -10,6 +10,8 @@ import {
   CanvasTexture,
   DoubleSide,
   MathUtils,
+  Matrix3,
+  Matrix4,
   Mesh,
   MeshStandardMaterial,
   Object3D,
@@ -24,7 +26,7 @@ import {
 import { SECTIONS, NB_SECTIONS } from "./Sections"
 import { animatePerson, makePerson, setOpacity } from "./Person"
 import { animateDog, makeDog } from "./Dog"
-import { earthTexture, makeBackpack, makeClock, makeEarth, makeGarland, makeMug, makeSwitch } from "./Decor"
+import { BOOKS, bookTexture, earthTexture, fourierTexture, makeBackpack, makeClock, makeEarth, makeGarland, makeLavaLamp, makeMug, makeSwitch } from "./Decor"
 import { drawScreens, installScreens, screenContents } from "./Screens"
 import { scrollToSection } from "./Elevator"
 import { DAYLIGHT_SPEED } from "./theme"
@@ -66,9 +68,16 @@ const CHAIRS = {
   bureau: { material: "Matériau.041", vertices: 3311 },
 }
 const DESK_HEIGHT = 0.75 // en mètres : sert à mettre le personnage à l'échelle de chaque pièce
+// Les claviers, glissés sous les mains du personnage (la salle de classe a ses deux claviers dans un seul objet)
+const KEYBOARDS = {
+  chambre: { material: "", vertices: 14341 },
+  classe: { material: "", vertices: 28682 },
+  bureau: { material: "", vertices: 14341 },
+}
+const FOREARM = 0.31 // en mètres, du coude au creux de la main
 
 // Lego, mon chien : son panier est avancé vers le visiteur depuis le centre de la chambre, la tête vers lui
-const DOG = { forward: 0.9, facing: -Math.PI / 2.4, awakeSeconds: 4, phrase: "Wouf ! Moi, c'est Lego." }
+const DOG = { forward: 0.9, scale: 1, facing: -Math.PI / 2.4, awakeSeconds: 4, phrase: "Wouf ! Moi, c'est Lego." }
 
 // Décor ajouté, placé par rapport à la chaise de chaque pièce (en mètres) :
 // `ahead` vers l'écran, `aside` sur le côté du personnage
@@ -76,6 +85,17 @@ const MUG = { ahead: 0.42, aside: 0.32 }
 const SWITCH = { ahead: 0.5, aside: 0.8 }
 const BACKPACK = { ahead: -0.05, aside: 0.5 }
 const GARLAND = { above: 0.12, overhang: 0.15, sag: 0.12 } // au-dessus de la fenêtre de la chambre
+const LAVA_LAMP = { ahead: 0.8, aside: -0.75 } // au bout du bureau de la chambre
+// Les six livres de l'étagère de la chambre, dans l'ordre de BOOKS
+const SHELF_BOOKS = [
+  { material: "Matériau.022", vertices: 284 },
+  { material: "Matériau.018", vertices: 280 },
+  { material: "Matériau.017", vertices: 284 },
+  { material: "Material", vertices: 285 },
+  { material: "Matériau.015", vertices: 285 },
+  { material: "Matériau.021", vertices: 283 },
+]
+const BOARD_INSET = { width: 0.9, height: 0.84 } // part du tableau couverte par les formules (le cadre reste visible)
 const WINDOW = { material: "Matériau.017", vertices: 1439 } // la fenêtre de la chambre
 const WHITEBOARD = { material: "Matériau.047", vertices: 830 } // le tableau de la classe, sous lequel on accroche l'horloge
 
@@ -272,6 +292,64 @@ function wallFrame(mesh, roomCenter) {
   return { center, normal, right, width: extent(right), height: extent(WORLD_UP), depth: extent(normal) }
 }
 
+// Glisse le clavier du poste sous les mains du personnage, puis incline ses avant-bras pour que les paumes touchent les touches
+function fitKeyboard(room, m, person, spec) {
+  const keyboard = findMesh(room, spec)
+  if (!keyboard) return
+  person.root.updateMatrixWorld(true)
+  keyboard.updateMatrixWorld(true)
+  const hands = person.parts.arms.map((arm) => arm.hand.getWorldPosition(new Vector3()))
+  const palms = hands[0].clone().lerp(hands[1], 0.5)
+  // L'objet contient le clavier et la souris (deux claviers en classe) : on range ses sommets proches des mains
+  // par tranches de 2 cm sur le côté, et le plus gros bloc de tranches contiguës est le clavier
+  const pos = keyboard.geometry.attributes.position
+  const bins = new Map()
+  for (let i = 0; i < pos.count; i++) {
+    const v = new Vector3().fromBufferAttribute(pos, i).applyMatrix4(keyboard.matrixWorld)
+    if (Math.hypot(v.x - palms.x, v.z - palms.z) > 0.6 * m.scale) continue
+    const bin = Math.round(v.clone().sub(m.center).dot(m.side) / (0.02 * m.scale))
+    if (!bins.has(bin)) bins.set(bin, [])
+    bins.get(bin).push(v)
+  }
+  let keys = [], run = []
+  for (const bin of [...bins.keys()].sort((p, q) => p - q)) {
+    if (run.length && !bins.has(bin - 1)) run = []
+    run = run.concat(bins.get(bin))
+    if (run.length > keys.length) keys = run
+  }
+  if (!keys.length) return
+  const center = new Box3().setFromPoints(keys).getCenter(new Vector3())
+  const top = Math.max(...keys.map((v) => v.y))
+  const shift = palms.clone().addScaledVector(m.facing, 0.05 * m.scale).sub(center).setY(0)
+  keyboard.position.copy(keyboard.parent.worldToLocal(keyboard.getWorldPosition(new Vector3()).add(shift)))
+  const scale = person.root.getWorldScale(new Vector3()).y
+  const drop = (palms.y - 0.024 * scale - top) / scale
+  person.parts.reach = Math.asin(MathUtils.clamp(drop / FOREARM, -0.5, 0.5))
+}
+
+// Colle une tranche illustrée sur la face d'un livre tournée vers la pièce
+function dressBook(mesh, book, roomCenter) {
+  mesh.geometry.computeBoundingBox()
+  const box = mesh.geometry.boundingBox
+  const size = box.getSize(new Vector3()), center = box.getCenter(new Vector3())
+  const axes = [new Vector3(1, 0, 0), new Vector3(0, 1, 0), new Vector3(0, 0, 1)]
+  const normals = new Matrix3().getNormalMatrix(mesh.matrixWorld)
+  const world = axes.map((axis) => axis.clone().applyMatrix3(normals).normalize())
+  const inward = roomCenter.clone().sub(center.clone().applyMatrix4(mesh.matrixWorld)).setY(0)
+  const up = [0, 1, 2].reduce((p, q) => (Math.abs(world[p].y) > Math.abs(world[q].y) ? p : q))
+  const [p, q] = [0, 1, 2].filter((k) => k !== up)
+  const face = Math.abs(world[p].dot(inward)) > Math.abs(world[q].dot(inward)) ? p : q
+  const across = face === p ? q : p
+  const N = axes[face].clone().multiplyScalar(Math.sign(world[face].dot(inward)) || 1)
+  const Y = axes[up].clone().multiplyScalar(Math.sign(world[up].y) || 1)
+  const X = new Vector3().crossVectors(Y, N)
+  const width = size.getComponent(across), height = size.getComponent(up)
+  const spine = new Mesh(new PlaneGeometry(width * 0.96, height * 0.96), new MeshStandardMaterial({ map: bookTexture(book, width / height), roughness: 0.8 }))
+  spine.quaternion.setFromRotationMatrix(new Matrix4().makeBasis(X, Y, N))
+  spine.position.copy(center).addScaledVector(N, size.getComponent(face) * 0.51)
+  mesh.add(spine)
+}
+
 // Poussière dorée qui flotte dans la pièce
 function makeDust(room, count = 36) {
   const box = new Box3().setFromObject(room)
@@ -351,7 +429,8 @@ const actionOf = (object) => {
   return null
 }
 
-export default function Apartment({ reducedMotion = false, day = false }) {
+// `day` est une ref vers le thème choisi (voir Experience)
+export default function Apartment({ reducedMotion = false, day }) {
   const scroll = useScroll()
   const { camera, size, pointer, clock, gl } = useThree()
   const { scene } = useGLTF(MODEL_URL)
@@ -368,7 +447,7 @@ export default function Apartment({ reducedMotion = false, day = false }) {
     offset: new Vector3(),
     scale: new Vector3(),
     introStart: null,
-    daylight: day ? 1 : 0,
+    daylight: day.current ? 1 : 0,
     hover: null,
     attention: ROOMS.map(() => 0),
     waves: ROOMS.map(() => -99),
@@ -418,6 +497,7 @@ export default function Apartment({ reducedMotion = false, day = false }) {
         if (!measures[k]) return null
         const person = seatPerson(r.object, measures[k], CHAIRS[r.name].scale)
         person.root.userData.action = { type: "person", room: k }
+        fitKeyboard(r.object, measures[k], person, KEYBOARDS[r.name])
         return person
       })
 
@@ -477,7 +557,7 @@ export default function Apartment({ reducedMotion = false, day = false }) {
         .add(new Vector3(VIEW_DIRECTION.x, 0, VIEW_DIRECTION.z).normalize().multiplyScalar(DOG.forward))
       if (measures[0]) {
         lego.root.position.set(spot.x, measures[0].floor, spot.z)
-        lego.root.scale.setScalar(measures[0].scale * 1.6)
+        lego.root.scale.setScalar(measures[0].scale * DOG.scale)
       }
       lego.root.rotation.y = DOG.facing
       lego.root.userData.action = { type: "dog", object: lego.root }
@@ -506,6 +586,26 @@ export default function Apartment({ reducedMotion = false, day = false }) {
         clock.root.updateMatrixWorld(true)
         classe.attach(clock.root)
         decor.push(clock)
+      }
+      // Le tableau : séries et transformée de Fourier
+      if (board) {
+        const w = wallFrame(board, rooms[1].sphere.center)
+        const width = w.width * BOARD_INSET.width, height = w.height * BOARD_INSET.height
+        const formulas = new Mesh(new PlaneGeometry(width, height), new MeshStandardMaterial({ map: fourierTexture(width / height), roughness: 0.6 }))
+        formulas.position.copy(w.center).addScaledVector(w.normal, w.depth / 2 + 0.004)
+        formulas.lookAt(formulas.position.clone().add(w.normal))
+        formulas.updateMatrixWorld(true)
+        classe.attach(formulas)
+      }
+      // Les livres de l'étagère de la chambre
+      SHELF_BOOKS.forEach((spec, k) => {
+        const mesh = findMesh(chambre, spec)
+        if (mesh) dressBook(mesh, BOOKS[k], rooms[0].sphere.center)
+      })
+      if (measures[0]) {
+        const lava = makeLavaLamp(measures[0].scale)
+        place(chambre, measures[0], lava.root, LAVA_LAMP, measures[0].deskTop)
+        decor.push(lava)
       }
       if (measures[1]) {
         const backpack = makeBackpack()
@@ -596,7 +696,8 @@ export default function Apartment({ reducedMotion = false, day = false }) {
     const { rooms, shots, people } = world
 
     // Nuit ou jour : la scène glisse doucement d'un réglage à l'autre
-    s.daylight = reducedMotion ? (day ? 1 : 0) : MathUtils.damp(s.daylight, day ? 1 : 0, DAYLIGHT_SPEED, delta)
+    const goal = day.current ? 1 : 0
+    s.daylight = reducedMotion ? goal : MathUtils.damp(s.daylight, goal, DAYLIGHT_SPEED, delta)
     const night = 1 - s.daylight
 
     // Arrivée : les pièces tombent du ciel l'une après l'autre, une fois l'écran de chargement parti

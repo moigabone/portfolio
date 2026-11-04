@@ -26,15 +26,16 @@ const NIGHT = { sky: "#5865c8", ground: "#241a3a", hemi: 0.55, sun: "#b4c2ff", s
 const DAY = { sky: "#dff1ff", ground: "#f2d4c4", hemi: 1.1, sun: "#fff0d9", sunPower: 2.4, sunAt: [9, 16, 10], env: 0.5 }
 
 // Clair de lune bleuté la nuit, soleil chaud le jour (avec ombres), et reflets doux.
-// Les lampes de chaque pièce sont gérées par Apartment.
+// Les lampes de chaque pièce sont gérées par Apartment. `day` est une ref : changer de thème ne refait pas le rendu de la scène.
 function Lights({ day, reducedMotion }) {
-  const hemi = useRef(), sun = useRef(), stars = useRef(), daylight = useRef(day ? 1 : 0)
+  const hemi = useRef(), sun = useRef(), stars = useRef(), daylight = useRef(day.current ? 1 : 0)
   const { scene } = useThree()
   const colors = useRef({ c: new Color(), night: { sky: new Color(NIGHT.sky), ground: new Color(NIGHT.ground), sun: new Color(NIGHT.sun) }, day: { sky: new Color(DAY.sky), ground: new Color(DAY.ground), sun: new Color(DAY.sun) } })
   const sunAt = useRef({ night: new Vector3(...NIGHT.sunAt), day: new Vector3(...DAY.sunAt) })
 
   useFrame((_, delta) => {
-    const d = (daylight.current = reducedMotion ? (day ? 1 : 0) : MathUtils.damp(daylight.current, day ? 1 : 0, DAYLIGHT_SPEED, delta))
+    const goal = day.current ? 1 : 0
+    const d = (daylight.current = reducedMotion ? goal : MathUtils.damp(daylight.current, goal, DAYLIGHT_SPEED, delta))
     const { night: n, day: j } = colors.current
     hemi.current.color.lerpColors(n.sky, j.sky, d)
     hemi.current.groundColor.lerpColors(n.ground, j.ground, d)
@@ -75,29 +76,35 @@ function Lights({ day, reducedMotion }) {
   )
 }
 
+// L'interrupteur jour / nuit garde son état pour lui : si Experience refaisait son rendu,
+// le Canvas se reconfigurerait et ScrollControls perdrait le défilement.
+// La scène lit le thème dans `dayRef` à chaque image, le CSS dans data-theme.
+function ThemeSwitch({ dayRef }) {
+  const [day, setDay] = useState(dayRef.current)
+  const choose = (isDay) => {
+    setDay(isDay)
+    dayRef.current = isDay
+    document.documentElement.dataset.theme = isDay ? "day" : "night"
+    saveTheme(isDay ? "day" : "night")
+  }
+  return <ThemeToggle day={day} onChange={choose} />
+}
+
 export default function Experience() {
   // null tant qu'on n'a pas pu tester le navigateur (rendu serveur)
   const [webgl, setWebgl] = useState(null)
   const [reducedMotion, setReducedMotion] = useState(false)
-  const [day, setDay] = useState(false)
   const scroll = useRef(null) // l'état du défilement, partagé avec le panneau d'ascenseur
+  const dayRef = useRef(false)
 
   useEffect(() => {
+    // Le thème est connu avant que la scène ne démarre : heure de Paris, ou dernier choix du visiteur
+    const saved = savedTheme()
+    dayRef.current = saved ? saved === "day" : parisIsDay()
+    document.documentElement.dataset.theme = dayRef.current ? "day" : "night"
     setWebgl(hasWebGL())
     setReducedMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches)
-    const saved = savedTheme()
-    setDay(saved ? saved === "day" : parisIsDay())
   }, [])
-
-  // Le CSS (ciel, étoiles filantes) suit le thème
-  useEffect(() => {
-    document.documentElement.dataset.theme = day ? "day" : "night"
-  }, [day])
-
-  const chooseTheme = (isDay) => {
-    setDay(isDay)
-    saveTheme(isDay ? "day" : "night")
-  }
 
   if (webgl === false) return <StaticPortfolio />
 
@@ -112,10 +119,10 @@ export default function Experience() {
           gl={{ toneMapping: NeutralToneMapping }}
           onCreated={({ gl }) => (gl.toneMapping = NeutralToneMapping)}
         >
-          <Lights day={day} reducedMotion={reducedMotion} />
+          <Lights day={dayRef} reducedMotion={reducedMotion} />
           <ScrollControls pages={NB_SECTIONS} damping={reducedMotion ? 0 : 0.2}>
             <Suspense fallback={null}>
-              <Apartment reducedMotion={reducedMotion} day={day} />
+              <Apartment reducedMotion={reducedMotion} day={dayRef} />
             </Suspense>
             <Overlay />
             <ScrollBridge target={scroll} />
@@ -125,7 +132,7 @@ export default function Experience() {
       {webgl && <Elevator scroll={scroll} />}
       <div className="fixed right-4 top-4 z-40 flex items-center gap-2">
         <SoundToggle />
-        <ThemeToggle day={day} onChange={chooseTheme} />
+        {webgl !== null && <ThemeSwitch dayRef={dayRef} />}
       </div>
       <Loader />
     </div>

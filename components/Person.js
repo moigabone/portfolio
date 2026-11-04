@@ -146,8 +146,9 @@ export function makePerson() {
     shoulder.add(forearm)
     const wrist = new Vector3(-side * 0.07, 0.02, 0.27)
     forearm.add(limb(new Vector3(), wrist, 0.044, m.sleeves, 0.04))
-    forearm.add(part(new SphereGeometry(0.04, 10, 8), m.skin, [wrist.x, wrist.y, wrist.z + 0.04], [1, 0.6, 1.3]))
-    arms.push({ side, shoulder, forearm })
+    const hand = part(new SphereGeometry(0.04, 10, 8), m.skin, [wrist.x, wrist.y, wrist.z + 0.04], [1, 0.6, 1.3])
+    forearm.add(hand)
+    arms.push({ side, shoulder, forearm, hand })
   }
 
   root.traverse((child) => {
@@ -156,7 +157,8 @@ export function makePerson() {
 
   // Position de la tête au repos, dans le repère du personnage : point de départ du regard
   const headRest = new Vector3(0, 0.5 + 0.77, 0.02 + 0.77 * Math.sin(0.12))
-  return { root, parts: { torso, head, arms, headRest }, materials: Object.values(m) }
+  // `reach` : inclinaison des avant-bras au repos, réglée pour que les mains se posent sur le clavier
+  return { root, parts: { torso, head, arms, headRest, reach: 0 }, materials: Object.values(m) }
 }
 
 // Petits gestes en boucle : respiration, frappe au clavier, regard qui se promène
@@ -193,7 +195,7 @@ export function animatePerson({ root, parts }, time, phase, camera, { attention 
   const waving = yaw >= 0 ? 1 : -1
   parts.arms.forEach(({ side, shoulder, forearm }, i) => {
     const w = side === waving ? wave : 0
-    forearm.rotation.x = Math.max(0, Math.sin(t * 7 + i * 2.1)) * -0.07 * (1 - glance) - 1.3 * w
+    forearm.rotation.x = parts.reach * (1 - w) + Math.max(0, Math.sin(t * 7 + i * 2.1)) * -0.07 * (1 - glance) - 1.3 * w
     shoulder.rotation.z = side * (2.2 + Math.sin(time * 9) * 0.25) * w
   })
   const idleYaw = Math.sin(t * 0.35) * 0.3 + Math.sin(t * 0.13) * 0.15

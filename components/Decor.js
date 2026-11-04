@@ -4,13 +4,16 @@ import {
   CatmullRomCurve3,
   CylinderGeometry,
   Group,
+  LatheGeometry,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  PointLight,
   SRGBColorSpace,
   SphereGeometry,
   TorusGeometry,
   TubeGeometry,
+  Vector2,
   Vector3,
 } from "three"
 
@@ -201,31 +204,214 @@ export function makeMug() {
 }
 
 // --- Switch réseau aux diodes qui clignotent, sur le bureau du NOC ---
+// Les ports font face au personnage (-z), le dessus porte des aérations et une étiquette
+
+function switchTop() {
+  const canvas = document.createElement("canvas")
+  canvas.width = 256
+  canvas.height = 128
+  const g = canvas.getContext("2d")
+  g.fillStyle = "#59606e"
+  g.fillRect(0, 0, 256, 128)
+  g.fillStyle = "#3a404b"
+  for (let k = 0; k < 9; k++) g.fillRect(150 + k * 10, 24, 5, 80) // aérations
+  g.fillStyle = "#e8ecf2"
+  g.fillRect(18, 22, 116, 34)
+  g.fillStyle = "#1a1d6a"
+  g.font = "bold 22px sans-serif"
+  g.fillText("SW-NOC-01", 24, 47)
+  g.fillStyle = "#3dff7a"
+  g.beginPath()
+  g.arc(30, 88, 7, 0, Math.PI * 2)
+  g.fill()
+  g.fillStyle = "#d9dde5"
+  g.font = "18px sans-serif"
+  g.fillText("48 × 1G · 4 × 10G", 44, 94)
+  const texture = new CanvasTexture(canvas)
+  texture.colorSpace = SRGBColorSpace
+  // Retournée pour se lire depuis l'avant du switch, côté personnage
+  texture.center.set(0.5, 0.5)
+  texture.rotation = Math.PI
+  return texture
+}
 
 export function makeSwitch() {
   const root = new Group()
-  const box = new Mesh(new BoxGeometry(0.44, 0.045, 0.2), new MeshStandardMaterial({ color: "#2b2e38", roughness: 0.5, metalness: 0.4 }))
-  box.position.y = 0.0225
+  const metal = new MeshStandardMaterial({ color: "#59606e", roughness: 0.45, metalness: 0.35 })
+  const top = new MeshStandardMaterial({ map: switchTop(), roughness: 0.5, metalness: 0.2 })
+  // Faces de la boîte : +x, -x, +y (le dessus), -y, +z, -z
+  const box = new Mesh(new BoxGeometry(0.44, 0.06, 0.24), [metal, metal, top, metal, metal, metal])
+  box.position.y = 0.03
   box.castShadow = true
   root.add(box)
+  const front = new Mesh(new BoxGeometry(0.42, 0.045, 0.004), new MeshStandardMaterial({ color: "#2a2e36", roughness: 0.6 }))
+  front.position.set(0, 0.03, -0.121)
+  root.add(front)
   const port = new MeshStandardMaterial({ color: "#0c0d12" })
   const leds = []
-  for (let k = 0; k < 8; k++) {
-    const x = -0.18 + k * 0.045
-    const socket = new Mesh(new BoxGeometry(0.03, 0.02, 0.004), port)
-    socket.position.set(x, 0.02, 0.101)
-    root.add(socket)
-    const material = new MeshStandardMaterial({ color: "#0a2a12", emissive: "#3dff7a", emissiveIntensity: 1 })
-    const led = new Mesh(new BoxGeometry(0.008, 0.006, 0.004), material)
-    led.position.set(x + 0.01, 0.037, 0.101)
-    root.add(led)
-    leds.push(material)
+  for (let row = 0; row < 2; row++) {
+    for (let k = 0; k < 12; k++) {
+      const x = -0.18 + k * 0.03
+      const y = 0.018 + row * 0.022
+      const socket = new Mesh(new BoxGeometry(0.022, 0.014, 0.004), port)
+      socket.position.set(x, y, -0.124)
+      root.add(socket)
+      const material = new MeshStandardMaterial({ color: "#0a2a12", emissive: (k + row) % 5 ? "#3dff7a" : "#ffb02e", emissiveIntensity: 1 })
+      const led = new Mesh(new BoxGeometry(0.006, 0.004, 0.004), material)
+      led.position.set(x + 0.007, y + 0.009, -0.124)
+      root.add(led)
+      leds.push(material)
+    }
   }
   return {
     root,
     animate(time) {
       // Chaque port clignote à son rythme, comme du trafic
-      leds.forEach((led, k) => (led.emissiveIntensity = Math.sin(time * (6 + k * 1.7) + k * 2.3) > 0.2 ? 1.4 : 0.15))
+      leds.forEach((led, k) => (led.emissiveIntensity = Math.sin(time * (6 + (k % 7) * 1.7) + k * 2.3) > 0.2 ? 2 : 0.2))
     },
   }
+}
+
+// --- Lampe à lave orange sur le bureau de la chambre ---
+
+// `scale` : unités du monde par mètre, pour la portée de sa lumière
+export function makeLavaLamp(scale) {
+  const root = new Group()
+  const metal = new MeshStandardMaterial({ color: "#b0703a", roughness: 0.3, metalness: 0.8 })
+  const profile = (points) => points.map(([r, y]) => new Vector2(r, y))
+  root.add(new Mesh(new LatheGeometry(profile([[0, 0], [0.07, 0], [0.06, 0.05], [0.042, 0.11], [0, 0.11]]), 24), metal))
+  // Verre : large en bas, fin en haut
+  const glass = new MeshStandardMaterial({ color: "#ff8a2a", emissive: "#ff5a00", emissiveIntensity: 0.4, transparent: true, opacity: 0.55, roughness: 0.1, depthWrite: false })
+  root.add(new Mesh(new LatheGeometry(profile([[0.042, 0.11], [0.06, 0.2], [0.03, 0.36]]), 24), glass))
+  root.add(new Mesh(new LatheGeometry(profile([[0.03, 0.36], [0.026, 0.41], [0, 0.415]]), 24), metal))
+  // Bulles de cire qui montent et redescendent lentement
+  const wax = new MeshStandardMaterial({ color: "#ffb347", emissive: "#ff7a10", emissiveIntensity: 1 })
+  const blobs = [0, 1, 2, 3, 4].map((i) => {
+    const blob = new Mesh(new SphereGeometry(0.018 + (i % 3) * 0.006, 14, 10), wax)
+    root.add(blob)
+    return { blob, phase: i * 1.3, speed: 0.12 + (i % 3) * 0.05 }
+  })
+  const light = new PointLight("#ff8a2a", 1, 1.4 * scale, 2)
+  light.position.y = 0.25
+  root.add(light)
+  return {
+    root,
+    animate(time, night) {
+      for (const { blob, phase, speed } of blobs) {
+        const p = 0.5 - 0.5 * Math.cos(time * speed + phase) // 0 en bas, 1 en haut
+        const wide = 0.055 - p * 0.03 // le verre se resserre en montant
+        blob.position.set(Math.sin(time * 0.3 + phase * 2) * wide * 0.3, 0.13 + p * 0.19, Math.cos(time * 0.25 + phase) * wide * 0.3)
+        blob.scale.set(1 + Math.sin(time * 0.7 + phase) * 0.15, 1.1 + Math.cos(time * 0.5 + phase) * 0.25, 1)
+      }
+      const glow = 0.4 + 0.8 * night
+      wax.emissiveIntensity = glow
+      glass.emissiveIntensity = glow * 0.5
+      light.intensity = (0.3 + 1.2 * night) * (1 + Math.sin(time * 1.3) * 0.08)
+    },
+  }
+}
+
+// --- Le tableau de la classe : la série et la transformée de Fourier ---
+
+// `aspect` : largeur / hauteur du tableau
+export function fourierTexture(aspect) {
+  const h = 640, w = Math.round(h * aspect)
+  const canvas = document.createElement("canvas")
+  canvas.width = w
+  canvas.height = h
+  const g = canvas.getContext("2d")
+  g.fillStyle = "#f6f6f1"
+  g.fillRect(0, 0, w, h)
+  const text = (str, x, y, size, color = "#1d2a6b", style = "italic") => {
+    g.fillStyle = color
+    g.font = `${style} ${size}px Georgia, serif`
+    g.fillText(str, x, y)
+  }
+  const left = 40
+  text("Séries de Fourier", left, 70, 40, "#b02a2a", "bold")
+  g.fillRect(left, 82, 310, 3)
+  text("f(x) = a₀/2 + Σ [ aₙ cos(nωx) + bₙ sin(nωx) ]", left, 150, 34)
+  text("aₙ = (2/T) ∫ f(x) cos(nωx) dx", left, 230, 32)
+  text("bₙ = (2/T) ∫ f(x) sin(nωx) dx", left, 290, 32)
+  text("Transformée de Fourier", left, 380, 30, "#b02a2a", "bold")
+  text("F(ω) = ∫ f(t) e^(−iωt) dt", left, 445, 36)
+  text("ω = 2π / T", left, 530, 30, "#2a7a3a")
+  // Signal carré et ses premières harmoniques, à droite (s'il y a la place)
+  const gw = Math.min(360, w - 760)
+  if (gw > 160) {
+    const gx = w - gw - 40, gy = 300, gh = 110
+    g.lineWidth = 3
+    g.strokeStyle = "#1d2a6b"
+    g.beginPath()
+    g.moveTo(gx, gy)
+    g.lineTo(gx + gw, gy)
+    g.moveTo(gx, gy - gh - 20)
+    g.lineTo(gx, gy + gh + 20)
+    g.stroke()
+    const curve = (terms, color) => {
+      g.strokeStyle = color
+      g.beginPath()
+      for (let i = 0; i <= 240; i++) {
+        const x = (i / 240) * 4 * Math.PI
+        let y = 0
+        for (let n = 1; n <= terms * 2; n += 2) y += Math.sin(n * x) / n
+        g.lineTo(gx + (i / 240) * gw, gy - (y * 4) / Math.PI * gh * 0.8)
+      }
+      g.stroke()
+    }
+    curve(1, "#2a7a3a")
+    curve(3, "#d07a1a")
+    curve(25, "#b02a2a")
+    text("1, 3 et 25 harmoniques", gx, gy + gh + 60, 24)
+  }
+  const texture = new CanvasTexture(canvas)
+  texture.colorSpace = SRGBColorSpace
+  texture.anisotropy = 8
+  return texture
+}
+
+// --- Les livres de l'étagère de la chambre ---
+
+export const BOOKS = [
+  { title: "BERSERK", volume: "1", paper: "#141214", ink: "#c0392b", weight: "bold" },
+  { title: "BERSERK", volume: "2", paper: "#141214", ink: "#c0392b", weight: "bold" },
+  { title: "NARUTO", volume: "1", paper: "#f07a1a", ink: "#1a1412", weight: "bold" },
+  { title: "NARUTO", volume: "2", paper: "#f07a1a", ink: "#1a1412", weight: "bold" },
+  { title: "LE SEIGNEUR DES ANNEAUX", volume: "", paper: "#1f3a2a", ink: "#e8c66a", weight: "" },
+  { title: "HARRY POTTER", volume: "", paper: "#7a1a1a", ink: "#ffd36a", weight: "bold" },
+]
+
+// Tranche d'un livre, à la proportion `aspect` (largeur / hauteur) : titre vertical, numéro en bas
+export function bookTexture({ title, volume, paper, ink, weight }, aspect) {
+  const h = 512, w = Math.max(64, Math.round(h * aspect))
+  const canvas = document.createElement("canvas")
+  canvas.width = w
+  canvas.height = h
+  const g = canvas.getContext("2d")
+  g.fillStyle = paper
+  g.fillRect(0, 0, w, h)
+  g.fillStyle = ink
+  g.fillRect(0, 22, w, 6)
+  g.fillRect(0, h - 28, w, 6)
+  g.textAlign = "center"
+  g.textBaseline = "middle"
+  g.save()
+  g.translate(w / 2, h / 2 - (volume ? 24 : 0))
+  g.rotate(Math.PI / 2)
+  const room = h - (volume ? 150 : 90)
+  let size = w * 0.6
+  g.font = `${weight} ${size}px Georgia, serif`
+  const width = g.measureText(title).width
+  if (width > room) size *= room / width
+  g.font = `${weight} ${size}px Georgia, serif`
+  g.fillText(title, 0, 0)
+  g.restore()
+  if (volume) {
+    g.font = `bold ${w * 0.45}px Georgia, serif`
+    g.fillText(volume, w / 2, h - 75)
+  }
+  const texture = new CanvasTexture(canvas)
+  texture.colorSpace = SRGBColorSpace
+  texture.anisotropy = 4
+  return texture
 }
