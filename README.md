@@ -27,7 +27,7 @@ Tout le texte du site se trouve dans [`content/portfolio.js`](content/portfolio.
 | `components/Apartment.jsx` | Modèle 3D, caméra qui cadre chaque pièce, mouvement des étages, décor animé, clics (réglages en haut du fichier) |
 | `components/Person.js` | Le personnage d'après mon Bitmoji et ses gestes (frappe, regard caméra, coucou) |
 | `components/Dog.js` | Lego, mon chien, dans son panier |
-| `components/Decor.js` | Décor ajouté : Terre, guirlande, horloge à l'heure de Paris, sac, mug, switch, lampe à lave, formules de Fourier au tableau, tranches des livres |
+| `components/Decor.js` | Décor ajouté : Terre, guirlande, horloge à l'heure de Paris, sac, mug, switch et ses câbles, lampe à lave, formules de Fourier, tranches des livres, PC gamer et casque RGB, PC de l'école, cahier |
 | `components/Screens.js` | Les écrans vivants : terminal, règles de firewall, mes sites (`public/screens/`), slides |
 | `components/Elevator.jsx` | Le panneau d'ascenseur pour aller d'un étage à l'autre |
 | `components/Controls.jsx`, `ambient.js`, `theme.js` | Interrupteur soleil / lune (heure de Paris par défaut) et ambiance sonore générée |

@@ -26,7 +26,24 @@ import {
 import { SECTIONS, NB_SECTIONS } from "./Sections"
 import { animatePerson, makePerson, setOpacity } from "./Person"
 import { animateDog, makeDog } from "./Dog"
-import { BOOKS, bookTexture, earthTexture, fourierTexture, makeBackpack, makeClock, makeEarth, makeGarland, makeLavaLamp, makeMug, makeSwitch } from "./Decor"
+import {
+  BOOKS,
+  bookTexture,
+  cloudTexture,
+  earthTexture,
+  fourierTexture,
+  makeBackpack,
+  makeClock,
+  makeEarth,
+  makeGamingPC,
+  makeGarland,
+  makeHeadset,
+  makeLavaLamp,
+  makeMug,
+  makeNotebook,
+  makeSchoolPC,
+  makeSwitch,
+} from "./Decor"
 import { drawScreens, installScreens, screenContents } from "./Screens"
 import { scrollToSection } from "./Elevator"
 import { DAYLIGHT_SPEED } from "./theme"
@@ -86,6 +103,15 @@ const SWITCH = { ahead: 0.5, aside: 0.8 }
 const BACKPACK = { ahead: -0.05, aside: 0.5 }
 const GARLAND = { above: 0.12, overhang: 0.15, sag: 0.12 } // au-dessus de la fenêtre de la chambre
 const LAVA_LAMP = { ahead: 0.8, aside: -0.75 } // au bout du bureau de la chambre
+const HEADSET = { ahead: 0.62, aside: 1.02 } // sur son support, entre le PC et l'écran
+const NOTEBOOK = { ahead: 0.36, aside: 0.5, lift: 0.012, size: 0.7 } // entre les deux postes, au bord de la table ; format A5, posé sur le plateau (un peu au-dessus de l'estimation)
+// Les tours du modèle, remplacées par des versions détaillées de la même taille
+const TOWER = { material: "Matériau.041", vertices: 820 } // le PC de la chambre devient un PC gamer
+const TOWER_GLASS = { material: "PC_Glass", vertices: 4 } // sa vitre d'origine
+const SCHOOL_TOWERS = [
+  { material: "Matériau.041", vertices: 822 },
+  { material: "Matériau.041", vertices: 820 },
+]
 // Les six livres de l'étagère de la chambre, dans l'ordre de BOOKS
 const SHELF_BOOKS = [
   { material: "Matériau.022", vertices: 284 },
@@ -327,6 +353,28 @@ function fitKeyboard(room, m, person, spec) {
   person.parts.reach = Math.asin(MathUtils.clamp(drop / FOREARM, -0.5, 0.5))
 }
 
+// Emprise d'un objet du modèle dans le repère de la chaise (en mètres), pour le remplacer par un objet fait main
+function footprint(mesh, m) {
+  const pos = mesh.geometry.attributes.position
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]
+  const v = new Vector3()
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld)
+    const at = [v.clone().sub(m.center).dot(m.facing), v.clone().sub(m.center).dot(m.side), v.y]
+    at.forEach((x, k) => {
+      lo[k] = Math.min(lo[k], x)
+      hi[k] = Math.max(hi[k], x)
+    })
+  }
+  return {
+    spot: { ahead: (lo[0] + hi[0]) / 2 / m.scale, aside: (lo[1] + hi[1]) / 2 / m.scale },
+    depth: (hi[0] - lo[0]) / m.scale,
+    width: (hi[1] - lo[1]) / m.scale,
+    height: (hi[2] - lo[2]) / m.scale,
+    bottom: lo[2],
+  }
+}
+
 // Colle une tranche illustrée sur la face d'un livre tournée vers la pièce
 function dressBook(mesh, book, roomCenter) {
   mesh.geometry.computeBoundingBox()
@@ -520,14 +568,14 @@ export default function Apartment({ reducedMotion = false, day }) {
 
       const plants = rooms.map((r) => findMesh(r.object, PLANTS)).filter(Boolean).map((m) => pivotAt(m, "base"))
       // Les globes gris deviennent des Terres qui tournent
-      const earthMap = earthTexture()
+      const earthMap = earthTexture(), clouds = cloudTexture()
       const globes = rooms
         .map((r) => [r.object, findMesh(r.object, GLOBE)])
         .filter(([, m]) => m)
         .map(([room, m]) => {
           const box = new Box3().setFromObject(m)
           const size = box.getSize(new Vector3())
-          const earth = makeEarth(Math.min(size.x, size.y, size.z) / 2, earthMap)
+          const earth = makeEarth(Math.min(size.x, size.y, size.z) / 2, earthMap, clouds)
           earth.root.position.copy(box.getCenter(new Vector3()))
           earth.root.updateMatrixWorld(true)
           room.attach(earth.root)
@@ -602,6 +650,37 @@ export default function Apartment({ reducedMotion = false, day }) {
         const mesh = findMesh(chambre, spec)
         if (mesh) dressBook(mesh, BOOKS[k], rooms[0].sphere.center)
       })
+      // Le PC de la chambre devient un PC gamer, ceux de la classe des PC d'école détaillés
+      const tower = findMesh(chambre, TOWER)
+      if (tower && measures[0]) {
+        const f = footprint(tower, measures[0])
+        const pc = makeGamingPC(f.width, f.depth, f.height, measures[0].scale)
+        place(chambre, measures[0], pc.root, f.spot, f.bottom)
+        tower.visible = false
+        const glass = findMesh(chambre, TOWER_GLASS)
+        if (glass) glass.visible = false
+        decor.push(pc)
+      }
+      for (const spec of SCHOOL_TOWERS) {
+        const mesh = findMesh(classe, spec)
+        if (!mesh || !measures[1]) continue
+        const f = footprint(mesh, measures[1])
+        const pc = makeSchoolPC(f.width, f.depth, f.height)
+        place(classe, measures[1], pc.root, f.spot, f.bottom)
+        mesh.visible = false
+        decor.push(pc)
+      }
+      if (measures[0]) {
+        const headset = makeHeadset()
+        place(chambre, measures[0], headset.root, HEADSET, measures[0].deskTop)
+        decor.push(headset)
+      }
+      if (measures[1]) {
+        const notebook = makeNotebook()
+        place(classe, measures[1], notebook.root, NOTEBOOK, measures[1].deskTop + NOTEBOOK.lift * measures[1].scale)
+        notebook.root.scale.multiplyScalar(NOTEBOOK.size)
+        decor.push(notebook)
+      }
       if (measures[0]) {
         const lava = makeLavaLamp(measures[0].scale)
         place(chambre, measures[0], lava.root, LAVA_LAMP, measures[0].deskTop)

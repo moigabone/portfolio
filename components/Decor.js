@@ -2,12 +2,15 @@ import {
   BoxGeometry,
   CanvasTexture,
   CatmullRomCurve3,
+  CircleGeometry,
+  ConeGeometry,
   CylinderGeometry,
   Group,
   LatheGeometry,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  PlaneGeometry,
   PointLight,
   SRGBColorSpace,
   SphereGeometry,
@@ -64,13 +67,50 @@ export function earthTexture() {
   return texture
 }
 
-// Remplace un globe gris par une Terre de la même taille, inclinée, qui tourne
-export function makeEarth(radius, texture) {
+// Les nuages : un autre bruit, blanc là où il est fort, transparent ailleurs
+export function cloudTexture() {
+  const w = 256, h = 128
+  const canvas = document.createElement("canvas")
+  canvas.width = w
+  canvas.height = h
+  const g = canvas.getContext("2d")
+  const img = g.createImageData(w, h)
+  for (let j = 0; j < h; j++) {
+    const lat = (0.5 - j / h) * Math.PI
+    for (let i = 0; i < w; i++) {
+      const lon = (i / w) * Math.PI * 2
+      const [x, y, z] = [Math.cos(lat) * Math.cos(lon), Math.sin(lat), Math.cos(lat) * Math.sin(lon)]
+      const n = fbm(x * 3 + 17, y * 6 + 3, z * 3 + 11)
+      img.data.set([255, 255, 255, Math.max(0, Math.min(1, (n - 0.55) * 5)) * 230], (j * w + i) * 4)
+    }
+  }
+  g.putImageData(img, 0, 0)
+  const texture = new CanvasTexture(canvas)
+  texture.colorSpace = SRGBColorSpace
+  return texture
+}
+
+// Remplace un globe gris par une Terre de la même taille, inclinée, qui tourne, avec ses nuages et son méridien doré
+export function makeEarth(radius, texture, clouds) {
   const tilt = new Group()
   tilt.rotation.z = 0.41 // l'inclinaison de la Terre
   const earth = new Mesh(new SphereGeometry(radius, 32, 20), new MeshStandardMaterial({ map: texture, roughness: 0.7 }))
   earth.castShadow = true
   tilt.add(earth)
+  if (clouds) {
+    const sky = new Mesh(new SphereGeometry(radius * 1.025, 32, 20), new MeshStandardMaterial({ map: clouds, transparent: true, depthWrite: false, roughness: 1 }))
+    sky.rotation.y = 1.3
+    earth.add(sky)
+  }
+  const gold = new MeshStandardMaterial({ color: "#d4a94a", metalness: 0.85, roughness: 0.3 })
+  const meridian = new Mesh(new TorusGeometry(radius * 1.1, radius * 0.035, 6, 40, Math.PI), gold)
+  meridian.rotation.z = -Math.PI / 2 // un demi-cercle d'un pôle à l'autre
+  tilt.add(meridian)
+  for (const y of [-1, 1]) {
+    const pin = new Mesh(new SphereGeometry(radius * 0.07, 8, 6), gold)
+    pin.position.y = y * radius * 1.1
+    tilt.add(pin)
+  }
   return { root: tilt, spinner: earth }
 }
 
@@ -100,11 +140,36 @@ export function makeGarland(from, to, sag, scale, count = 14) {
 
 // --- Horloge murale de la salle de classe, à l'heure de Paris ---
 
+// Cadran : les douze chiffres et le nom de la ville
+function clockFace() {
+  const canvas = document.createElement("canvas")
+  canvas.width = canvas.height = 256
+  const g = canvas.getContext("2d")
+  g.fillStyle = "#f6f3ea"
+  g.fillRect(0, 0, 256, 256)
+  g.fillStyle = "#1a1d6a"
+  g.textAlign = "center"
+  g.textBaseline = "middle"
+  g.font = "bold 26px Georgia, serif"
+  for (let k = 1; k <= 12; k++) {
+    const a = (k / 12) * Math.PI * 2
+    g.fillText(String(k), 128 + Math.sin(a) * 86, 128 - Math.cos(a) * 86)
+  }
+  g.font = "13px Georgia, serif"
+  g.fillText("PARIS", 128, 170)
+  const texture = new CanvasTexture(canvas)
+  texture.colorSpace = SRGBColorSpace
+  return texture
+}
+
 export function makeClock() {
   const root = new Group()
   const face = new Mesh(new CylinderGeometry(0.15, 0.15, 0.02, 32), new MeshStandardMaterial({ color: "#f6f3ea", roughness: 0.6 }))
   face.rotation.x = Math.PI / 2
   root.add(face)
+  const dial = new Mesh(new CircleGeometry(0.14, 48), new MeshStandardMaterial({ map: clockFace(), roughness: 0.6 }))
+  dial.position.z = 0.0105
+  root.add(dial)
   const rim = new Mesh(new TorusGeometry(0.15, 0.012, 8, 32), new MeshStandardMaterial({ color: "#1a1d6a", roughness: 0.4 }))
   root.add(rim)
   const ink = new MeshStandardMaterial({ color: "#1a1d6a" })
@@ -125,6 +190,10 @@ export function makeClock() {
     return pivot
   }
   const hours = hand(0.07, 0.012, ink), minutes = hand(0.105, 0.008, ink), seconds = hand(0.115, 0.003, new MeshStandardMaterial({ color: "#c0392b" }))
+  const axle = new Mesh(new CylinderGeometry(0.01, 0.01, 0.01, 12), new MeshStandardMaterial({ color: "#c0392b" }))
+  axle.rotation.x = Math.PI / 2
+  axle.position.z = 0.018
+  root.add(axle)
   const parisTime = new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", hour: "numeric", minute: "numeric", second: "numeric", hourCycle: "h23" })
   let last = -1
   return {
@@ -142,30 +211,99 @@ export function makeClock() {
 }
 
 // --- Sac à dos posé au pied de la chaise ---
+// La poche avant est tournée vers le visiteur (-z), les bretelles contre la chaise (+z)
+
+function patchTexture() {
+  const canvas = document.createElement("canvas")
+  canvas.width = canvas.height = 128
+  const g = canvas.getContext("2d")
+  g.fillStyle = "#ffd36a"
+  g.beginPath()
+  g.arc(64, 64, 62, 0, Math.PI * 2)
+  g.fill()
+  g.fillStyle = "#1a1d6a"
+  g.beginPath()
+  g.arc(64, 64, 52, 0, Math.PI * 2)
+  g.fill()
+  // Un cadenas : la cybersécurité
+  g.strokeStyle = "#ffd36a"
+  g.lineWidth = 9
+  g.beginPath()
+  g.arc(64, 54, 17, Math.PI, 0)
+  g.stroke()
+  g.fillStyle = "#ffd36a"
+  g.fillRect(40, 54, 48, 36)
+  g.fillStyle = "#1a1d6a"
+  g.fillRect(61, 64, 6, 14)
+  const texture = new CanvasTexture(canvas)
+  texture.colorSpace = SRGBColorSpace
+  return texture
+}
 
 export function makeBackpack() {
   const root = new Group()
   const fabric = new MeshStandardMaterial({ color: "#2d3a6b", roughness: 0.9 })
+  const darker = new MeshStandardMaterial({ color: "#222c52", roughness: 0.9 })
   const accent = new MeshStandardMaterial({ color: "#ffd36a", roughness: 0.6 })
-  const body = new Mesh(new BoxGeometry(0.3, 0.38, 0.16), fabric)
-  body.position.y = 0.19
-  root.add(body)
-  const top = new Mesh(new CylinderGeometry(0.08, 0.08, 0.3, 16, 1, false, 0, Math.PI), fabric)
+  const metal = new MeshStandardMaterial({ color: "#d9dde5", metalness: 0.9, roughness: 0.3 })
+  const add = (mesh, [x, y, z]) => {
+    mesh.position.set(x, y, z)
+    root.add(mesh)
+    return mesh
+  }
+  add(new Mesh(new BoxGeometry(0.3, 0.38, 0.16), fabric), [0, 0.19, 0])
+  const top = add(new Mesh(new CylinderGeometry(0.08, 0.08, 0.3, 16, 1, false, 0, Math.PI), fabric), [0, 0.38, 0])
   top.rotation.z = Math.PI / 2
-  top.position.y = 0.38
-  root.add(top)
-  const pocket = new Mesh(new BoxGeometry(0.22, 0.16, 0.05), fabric)
-  pocket.position.set(0, 0.12, 0.1)
-  root.add(pocket)
-  const zip = new Mesh(new BoxGeometry(0.2, 0.012, 0.01), accent)
-  zip.position.set(0, 0.2, 0.126)
-  root.add(zip)
-  root.rotation.x = -0.18 // appuyé contre le pied de la chaise
+  // Poche avant et ses fermetures éclair
+  add(new Mesh(new BoxGeometry(0.24, 0.17, 0.05), darker), [0, 0.12, -0.1])
+  add(new Mesh(new BoxGeometry(0.22, 0.01, 0.01), accent), [0, 0.2, -0.126])
+  add(new Mesh(new BoxGeometry(0.26, 0.01, 0.01), accent), [0, 0.33, -0.082])
+  for (const [x, y, z] of [[0.09, 0.19, -0.128], [-0.11, 0.32, -0.084]]) add(new Mesh(new BoxGeometry(0.012, 0.03, 0.006), metal), [x, y, z])
+  // Écusson sur la poche
+  const patch = add(new Mesh(new CircleGeometry(0.045, 24), new MeshStandardMaterial({ map: patchTexture(), roughness: 0.8 })), [0.04, 0.12, -0.1255])
+  patch.rotation.y = Math.PI
+  // Poignée sur le dessus, bretelles au dos
+  const handle = add(new Mesh(new TorusGeometry(0.035, 0.008, 6, 14, Math.PI), darker), [0, 0.45, 0])
+  handle.rotation.y = Math.PI / 2
+  for (const x of [-0.08, 0.08]) {
+    const strap = add(new Mesh(new BoxGeometry(0.05, 0.34, 0.02), darker), [x, 0.2, 0.09])
+    strap.rotation.x = 0.08
+  }
+  // Gourde dans la poche de côté
+  add(new Mesh(new BoxGeometry(0.03, 0.12, 0.12), darker), [0.165, 0.08, 0])
+  add(new Mesh(new CylinderGeometry(0.03, 0.03, 0.2, 14), new MeshStandardMaterial({ color: "#2fb39a", roughness: 0.3, metalness: 0.4 })), [0.17, 0.15, 0])
+  add(new Mesh(new CylinderGeometry(0.02, 0.022, 0.03, 12), new MeshStandardMaterial({ color: "#16171c" })), [0.17, 0.265, 0])
+  // Porte-clés : un anneau et une petite clé dorée
+  add(new Mesh(new TorusGeometry(0.012, 0.002, 6, 12), metal), [-0.11, 0.29, -0.09])
+  add(new Mesh(new BoxGeometry(0.008, 0.035, 0.003), accent), [-0.11, 0.26, -0.09])
+  root.rotation.x = 0.18 // appuyé contre le pied de la chaise
   root.traverse((c) => c.isMesh && (c.castShadow = true))
   return { root, animate() {} }
 }
 
 // --- Mug fumant sur le bureau ---
+
+// Le motif du mug, imprimé deux fois pour qu'on le voie de tous les côtés
+function mugPrint() {
+  const canvas = document.createElement("canvas")
+  canvas.width = 512
+  canvas.height = 128
+  const g = canvas.getContext("2d")
+  g.fillStyle = "#1a1d6a"
+  g.fillRect(0, 0, 512, 128)
+  g.fillStyle = "#ffd36a"
+  g.textAlign = "center"
+  g.textBaseline = "middle"
+  for (const x of [128, 384]) {
+    g.font = "bold 44px monospace"
+    g.fillText("</>", x, 50)
+    g.font = "bold 22px monospace"
+    g.fillText("sudo café", x, 98)
+  }
+  const texture = new CanvasTexture(canvas)
+  texture.colorSpace = SRGBColorSpace
+  return texture
+}
 
 export function makeMug() {
   const root = new Group()
@@ -173,6 +311,9 @@ export function makeMug() {
   const cup = new Mesh(new CylinderGeometry(0.042, 0.038, 0.1, 18), ceramic)
   cup.position.y = 0.05
   root.add(cup)
+  const print = new Mesh(new CylinderGeometry(0.0425, 0.0405, 0.05, 24, 1, true), new MeshStandardMaterial({ map: mugPrint(), roughness: 0.4 }))
+  print.position.y = 0.055
+  root.add(print)
   const coffee = new Mesh(new CylinderGeometry(0.036, 0.036, 0.004, 18), new MeshStandardMaterial({ color: "#3b2416" }))
   coffee.position.y = 0.092
   root.add(coffee)
@@ -263,6 +404,25 @@ export function makeSwitch() {
       leds.push(material)
     }
   }
+  // Câbles branchés sur quelques ports : la prise, puis le câble qui part vers l'intérieur du bureau, derrière les écrans
+  const colors = ["#2a6cff", "#ffd23a", "#d9dde5", "#e0453a", "#2fb35a"]
+  ;[0, 1, 3, 4, 6, 9, 13, 14, 16, 20].forEach((port, k) => {
+    const row = Math.floor(port / 12), col = port % 12
+    const x = -0.18 + col * 0.03, y = 0.018 + row * 0.022
+    const material = new MeshStandardMaterial({ color: colors[k % colors.length], roughness: 0.6 })
+    const plug = new Mesh(new BoxGeometry(0.018, 0.012, 0.022), material)
+    plug.position.set(x, y, -0.135)
+    root.add(plug)
+    const out = 0.3 + k * 0.006
+    const path = new CatmullRomCurve3([
+      new Vector3(x, y, -0.146),
+      new Vector3(x - 0.01, y * 0.4, -0.18 - k * 0.003),
+      new Vector3((x - out) / 2, 0.005, -0.19 - k * 0.003),
+      new Vector3(-out, 0.005, -0.12),
+      new Vector3(-out - 0.02, 0.005, 0.12),
+    ])
+    root.add(new Mesh(new TubeGeometry(path, 24, 0.0035, 5), material))
+  })
   return {
     root,
     animate(time) {
@@ -414,4 +574,324 @@ export function bookTexture({ title, volume, paper, ink, weight }, aspect) {
   texture.colorSpace = SRGBColorSpace
   texture.anisotropy = 4
   return texture
+}
+
+// --- Éclairage RGB : la couleur fait le tour de l'arc-en-ciel, chaque pièce avec son décalage ---
+
+function rainbow(material, time, offset, power) {
+  material.emissive.setHSL((((time * 0.06 + offset) % 1) + 1) % 1, 1, 0.5)
+  material.emissiveIntensity = power
+}
+const rgbMaterial = () => new MeshStandardMaterial({ color: "#111111", emissive: "#ff00ff", emissiveIntensity: 1.5, roughness: 0.4 })
+
+// Ventilateur vu de face (vers -z) : anneau lumineux, pales qui tournent, moyeu
+function makeFan(radius, ring) {
+  const fan = new Group()
+  const frame = new Mesh(new TorusGeometry(radius, radius * 0.12, 8, 32), ring)
+  fan.add(frame)
+  const blades = new Group()
+  const plastic = new MeshStandardMaterial({ color: "#1b1d24", roughness: 0.6 })
+  for (let k = 0; k < 7; k++) {
+    const blade = new Mesh(new BoxGeometry(radius * 0.32, radius * 0.85, radius * 0.04), plastic)
+    blade.position.y = radius * 0.5
+    const arm = new Group()
+    arm.rotation.z = (k / 7) * Math.PI * 2
+    blade.rotation.y = 0.5
+    arm.add(blade)
+    blades.add(arm)
+  }
+  fan.add(blades)
+  const hub = new Mesh(new CylinderGeometry(radius * 0.28, radius * 0.28, radius * 0.1, 16), plastic)
+  hub.rotation.x = Math.PI / 2
+  fan.add(hub)
+  return { fan, blades }
+}
+
+// --- Le PC gamer de la chambre : vitre latérale, ventilateurs RGB en façade, carte graphique, RAM, watercooling ---
+// W : largeur (x), D : profondeur (z, la façade est en -z), H : hauteur, en mètres. La vitre est côté -x.
+export function makeGamingPC(W, D, H, scale) {
+  const root = new Group()
+  const body = new Group()
+  body.scale.x = -1 // construit vitre en -x, puis retourné : la vitre passe en +x, du côté de la caméra
+  root.add(body)
+  const black = new MeshStandardMaterial({ color: "#121318", roughness: 0.35, metalness: 0.6 })
+  const dark = new MeshStandardMaterial({ color: "#1c1f27", roughness: 0.6, metalness: 0.3 })
+  const glass = new MeshStandardMaterial({ color: "#8fa6d8", roughness: 0.05, metalness: 0.2, transparent: true, opacity: 0.1, depthWrite: false })
+  const t = 0.012
+  const box = (w, h, d, [x, y, z], material) => {
+    const mesh = new Mesh(new BoxGeometry(w, h, d), material)
+    mesh.position.set(x, y, z)
+    body.add(mesh)
+    return mesh
+  }
+  // Boîtier
+  box(W, t, D, [0, t / 2, 0], black)
+  box(W, t, D, [0, H - t / 2, 0], black)
+  box(t, H, D, [W / 2 - t / 2, H / 2, 0], black)
+  box(W, H, t, [0, H / 2, D / 2 - t / 2], black)
+  box(W, H, t, [0, H / 2, -D / 2 + t / 2], dark)
+  box(t * 0.4, H - 2 * t, D - 2 * t, [-W / 2 + t / 2, H / 2, 0], glass)
+  for (const y of [t, H - t]) box(t, t, D, [-W / 2 + t / 2, y, 0], black) // montants de la vitre
+  // Pieds
+  for (const x of [-W / 3, W / 3]) for (const z of [-D / 3, D / 3]) box(0.03, 0.012, 0.05, [x, -0.006, z], black)
+
+  const lights = [] // [matériau, décalage de couleur]
+  const glow = () => {
+    const material = rgbMaterial()
+    lights.push([material, lights.length * 0.07])
+    return material
+  }
+  // Trois ventilateurs en façade
+  const fans = []
+  const r = Math.min(W * 0.4, H / 7)
+  for (let k = 0; k < 3; k++) {
+    const { fan, blades } = makeFan(r, glow())
+    fan.position.set(0, H * (0.24 + k * 0.26), -D / 2 - 0.003)
+    body.add(fan)
+    fans.push(blades)
+  }
+  // Ventilateur arrière, vu à travers la vitre
+  const rear = makeFan(r * 0.8, glow())
+  rear.fan.position.set(-W * 0.05, H * 0.76, D / 2 - t - 0.012)
+  rear.fan.rotation.y = Math.PI
+  body.add(rear.fan)
+  fans.push(rear.blades)
+
+  // Carte mère contre la paroi opaque
+  const inner = W / 2 - t
+  box(0.004, H * 0.68, D * 0.7, [inner - 0.002, H * 0.6, D * 0.08], new MeshStandardMaterial({ color: "#3a4252", roughness: 0.6, metalness: 0.3 }))
+  // Watercooling : la pompe et son anneau lumineux, tournés vers la vitre
+  const pump = new Mesh(new CylinderGeometry(0.035, 0.035, 0.03, 24), black)
+  pump.rotation.z = Math.PI / 2
+  pump.position.set(inner - 0.02, H * 0.68, D * 0.08)
+  body.add(pump)
+  const pumpRing = new Mesh(new TorusGeometry(0.03, 0.005, 8, 32), glow())
+  pumpRing.rotation.y = Math.PI / 2
+  pumpRing.position.set(inner - 0.036, H * 0.68, D * 0.08)
+  body.add(pumpRing)
+  // Quatre barrettes de RAM, le haut lumineux
+  for (let k = 0; k < 4; k++) {
+    const z = D * 0.08 - 0.07 - k * 0.012
+    box(0.035, H * 0.13, 0.008, [inner - 0.02, H * 0.62, z], new MeshStandardMaterial({ color: "#5a6070", roughness: 0.4, metalness: 0.6 }))
+    box(0.037, 0.014, 0.009, [inner - 0.02, H * 0.62 + H * 0.065, z], glow())
+  }
+  // Carte graphique couchée, avec sa bande lumineuse côté vitre
+  const gpuW = Math.min(W * 0.5, 0.12)
+  box(gpuW, H * 0.09, D * 0.66, [inner - gpuW / 2 - 0.004, H * 0.4, D * 0.12], new MeshStandardMaterial({ color: "#3b3f4a", roughness: 0.35, metalness: 0.6 }))
+  box(0.004, 0.016, D * 0.6, [inner - gpuW - 0.006, H * 0.4, D * 0.12], glow())
+  // Les trois ventilateurs de la carte graphique, sous elle
+  for (let k = 0; k < 3; k++) {
+    const gpuFan = new Mesh(new TorusGeometry(D * 0.08, 0.003, 6, 20), glow())
+    gpuFan.rotation.x = Math.PI / 2
+    gpuFan.position.set(inner - gpuW / 2 - 0.004, H * 0.4 - H * 0.046, D * (0.12 - 0.2 + k * 0.2))
+    body.add(gpuFan)
+  }
+  // Ruban lumineux le long de la façade, à l'intérieur
+  box(0.006, H * 0.7, 0.006, [-W / 2 + t + 0.01, H * 0.55, -D / 2 + t + 0.01], glow())
+  // Cache-alimentation en bas, et un ruban lumineux le long de la vitre, en haut
+  box(W - 2 * t, H * 0.17, D - 2 * t, [0, t + H * 0.085, 0], dark)
+  box(0.006, 0.006, D - 2 * t, [-W / 2 + t + 0.01, H - t - 0.01, 0], glow())
+  // Bouton d'allumage
+  const power = new MeshStandardMaterial({ color: "#ffffff", emissive: "#9fd8ff", emissiveIntensity: 1.5 })
+  const button = new Mesh(new CylinderGeometry(0.008, 0.008, 0.004, 16), power)
+  button.position.set(0, H + 0.002, -D * 0.38)
+  body.add(button)
+
+  // Une lumière dans le boîtier, qui suit la couleur des LED, et une autre plus douce qui déborde sur le bureau
+  const light = new PointLight("#ff00ff", 1, 0.5 * scale, 2)
+  light.position.set(-W * 0.2, H * 0.55, 0)
+  body.add(light)
+  const spill = new PointLight("#ff00ff", 0.5, 1.2 * scale, 2)
+  spill.position.set(-W, H * 0.5, 0)
+  body.add(spill)
+  return {
+    root,
+    animate(time, night) {
+      const power = 1.2 + 1.3 * night
+      for (const [material, offset] of lights) rainbow(material, time, offset, power)
+      light.color.copy(lights[0][0].emissive)
+      spill.color.copy(lights[0][0].emissive)
+      light.intensity = 1.5 + 2 * night
+      spill.intensity = 0.2 + 0.6 * night
+      for (const blades of fans) blades.rotation.z = -time * 7
+    },
+  }
+}
+
+// --- Casque gamer sur son support, à côté du PC ---
+
+export function makeHeadset() {
+  const root = new Group()
+  const black = new MeshStandardMaterial({ color: "#16171c", roughness: 0.5, metalness: 0.4 })
+  const foam = new MeshStandardMaterial({ color: "#2a2b33", roughness: 0.95 })
+  // Le support : socle, tige et crochet
+  const base = new Mesh(new CylinderGeometry(0.06, 0.07, 0.012, 24), black)
+  base.position.y = 0.006
+  root.add(base)
+  const pole = new Mesh(new CylinderGeometry(0.008, 0.01, 0.22, 10), black)
+  pole.position.y = 0.12
+  root.add(pole)
+  const hook = new Mesh(new BoxGeometry(0.03, 0.012, 0.06), black)
+  hook.position.y = 0.232
+  root.add(hook)
+  // Arceau et coussinets
+  const band = new Mesh(new TorusGeometry(0.085, 0.012, 8, 24, Math.PI), black)
+  band.position.y = 0.17
+  root.add(band)
+  const rings = []
+  for (const side of [-1, 1]) {
+    const cup = new Mesh(new CylinderGeometry(0.045, 0.045, 0.035, 24), black)
+    cup.rotation.z = Math.PI / 2
+    cup.position.set(side * 0.09, 0.15, 0)
+    root.add(cup)
+    const cushion = new Mesh(new TorusGeometry(0.034, 0.012, 8, 20), foam)
+    cushion.rotation.y = Math.PI / 2
+    cushion.position.set(side * 0.073, 0.15, 0)
+    root.add(cushion)
+    const ring = new Mesh(new TorusGeometry(0.033, 0.004, 6, 24), rgbMaterial())
+    ring.rotation.y = Math.PI / 2
+    ring.position.set(side * 0.109, 0.15, 0)
+    root.add(ring)
+    rings.push(ring.material)
+  }
+  // Micro replié le long de l'écouteur gauche
+  const mic = new Mesh(new CylinderGeometry(0.004, 0.004, 0.1, 6), black)
+  mic.position.set(-0.11, 0.13, -0.04)
+  mic.rotation.x = 1.1
+  root.add(mic)
+  return {
+    root,
+    animate(time, night) {
+      rings.forEach((m, k) => rainbow(m, time, 0.3 + k * 0.1, 1 + night))
+    },
+  }
+}
+
+// --- Les tours de la salle de classe : PC de l'école, façade avec ports et voyant ---
+
+export function makeSchoolPC(W, D, H) {
+  const root = new Group()
+  const grey = new MeshStandardMaterial({ color: "#2b2e36", roughness: 0.5, metalness: 0.4 })
+  const face = new MeshStandardMaterial({ color: "#1a1c22", roughness: 0.6 })
+  const box = (w, h, d, [x, y, z], material) => {
+    const mesh = new Mesh(new BoxGeometry(w, h, d), material)
+    mesh.position.set(x, y, z)
+    root.add(mesh)
+    return mesh
+  }
+  box(W, H, D, [0, H / 2, 0], grey)
+  box(W * 0.92, H * 0.94, 0.006, [0, H / 2, -D / 2 - 0.003], face)
+  // Grille d'aération, lecteur, ports USB et bouton avec son voyant bleu
+  const slot = new MeshStandardMaterial({ color: "#0c0d10" })
+  for (let k = 0; k < 8; k++) box(W * 0.6, 0.006, 0.004, [0, H * (0.2 + k * 0.045), -D / 2 - 0.007], slot)
+  box(W * 0.7, H * 0.05, 0.004, [0, H * 0.82, -D / 2 - 0.007], slot)
+  for (const x of [-0.012, 0.012]) box(0.012, 0.005, 0.004, [x, H * 0.72, -D / 2 - 0.007], new MeshStandardMaterial({ color: "#2a6cff" }))
+  const led = new MeshStandardMaterial({ color: "#ffffff", emissive: "#4aa8ff", emissiveIntensity: 1.5 })
+  const button = new Mesh(new CylinderGeometry(0.01, 0.01, 0.006, 16), led)
+  button.rotation.x = Math.PI / 2
+  button.position.set(0, H * 0.9, -D / 2 - 0.008)
+  root.add(button)
+  return {
+    root,
+    animate(time) {
+      // Le voyant d'activité du disque clignote de temps en temps
+      led.emissiveIntensity = Math.sin(time * 3.1) > 0.6 || Math.sin(time * 7.3) > 0.9 ? 2.2 : 1.1
+    },
+  }
+}
+
+// --- Cahier ouvert sur la table de la classe, avec son stylo ---
+
+function notebookPages() {
+  const canvas = document.createElement("canvas")
+  canvas.width = 1024
+  canvas.height = 720
+  const g = canvas.getContext("2d")
+  g.fillStyle = "#fbfaf4"
+  g.fillRect(0, 0, 1024, 720)
+  g.strokeStyle = "#b9cbe6"
+  g.lineWidth = 2
+  for (let y = 80; y < 720; y += 36) {
+    g.beginPath()
+    g.moveTo(20, y)
+    g.lineTo(1004, y)
+    g.stroke()
+  }
+  g.strokeStyle = "#e3a0a0"
+  for (const x of [70, 582]) {
+    g.beginPath()
+    g.moveTo(x, 0)
+    g.lineTo(x, 720)
+    g.stroke()
+  }
+  g.fillStyle = "#c9c6bc"
+  g.fillRect(508, 0, 8, 720) // le creux entre les pages
+  const ink = (str, x, y, size = 30, color = "#1d2a6b") => {
+    g.fillStyle = color
+    g.font = `italic ${size}px Georgia, serif`
+    g.fillText(str, x, y)
+  }
+  // Page de gauche : le cours de traitement du signal
+  ink("TD — Traitement du signal", 84, 70, 32, "#b02a2a")
+  ink("x(t) = Σ cₙ e^(inωt)", 84, 144)
+  ink("cₙ = (1/T) ∫ x(t) e^(−inωt) dt", 84, 216)
+  ink("Parseval :", 84, 288, 28, "#2a7a3a")
+  ink("(1/T) ∫ |x(t)|² dt = Σ |cₙ|²", 84, 324)
+  ink("→ spectre de raies", 84, 396)
+  // Page de droite : un schéma réseau
+  ink("Projet : bastion", 596, 70, 32, "#b02a2a")
+  const node = (label, x, y) => {
+    g.strokeStyle = "#1d2a6b"
+    g.lineWidth = 3
+    g.strokeRect(x, y, 120, 56)
+    ink(label, x + 14, y + 38, 26)
+  }
+  node("Admin", 600, 150)
+  node("Bastion", 750, 260)
+  node("Serveurs", 870, 380)
+  g.beginPath()
+  g.moveTo(720, 178)
+  g.lineTo(750, 288)
+  g.moveTo(870, 288)
+  g.lineTo(900, 380)
+  g.stroke()
+  ink("SSH + MFA", 600, 520, 28, "#2a7a3a")
+  ink("sessions enregistrées ✓", 600, 580, 26)
+  const texture = new CanvasTexture(canvas)
+  texture.colorSpace = SRGBColorSpace
+  texture.anisotropy = 8
+  return texture
+}
+
+export function makeNotebook() {
+  const root = new Group()
+  const cover = new Mesh(new BoxGeometry(0.43, 0.006, 0.3), new MeshStandardMaterial({ color: "#1a1d6a", roughness: 0.8 }))
+  cover.position.y = 0.003
+  root.add(cover)
+  const pages = new Mesh(new PlaneGeometry(0.42, 0.29), new MeshStandardMaterial({ map: notebookPages(), roughness: 0.9 }))
+  pages.rotation.x = -Math.PI / 2
+  pages.rotation.z = Math.PI // se lit depuis la chaise
+  pages.position.y = 0.0075
+  root.add(pages)
+  // Spirale au milieu
+  const metal = new MeshStandardMaterial({ color: "#c8ccd4", metalness: 0.9, roughness: 0.3 })
+  for (let k = 0; k < 11; k++) {
+    const ring = new Mesh(new TorusGeometry(0.008, 0.0015, 5, 12), metal)
+    ring.rotation.x = Math.PI / 2
+    ring.rotation.y = Math.PI / 2
+    ring.position.set(0, 0.008, -0.13 + k * 0.026)
+    root.add(ring)
+  }
+  // Stylo posé à côté
+  const pen = new Group()
+  const body = new Mesh(new CylinderGeometry(0.005, 0.005, 0.13, 10), new MeshStandardMaterial({ color: "#2a6cff", roughness: 0.4 }))
+  pen.add(body)
+  const tip = new Mesh(new ConeGeometry(0.005, 0.014, 10), new MeshStandardMaterial({ color: "#d9dde5", metalness: 0.8 }))
+  tip.position.y = 0.072
+  pen.add(tip)
+  pen.rotation.set(0, 0.4, Math.PI / 2)
+  pen.position.set(0.25, 0.006, 0.02)
+  root.add(pen)
+  root.traverse((c) => c.isMesh && (c.castShadow = true))
+  return { root, animate() {} }
 }
