@@ -125,3 +125,17 @@ html[data-theme="day"] body::after { display: none; }
   border-bottom: 1px solid var(--color-gilt);
   transform: translateX(-50%) rotate(45deg);
 }
+
+/* Étiquette au survol des objets cliquables (bannière, affiche Ecritel, Lego) */
+.hover-label {
+  transform: translateY(-80%);
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--color-gilt);
+  background: rgb(10 9 38 / 0.94);
+  color: var(--color-gilt);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  pointer-events: none;
+}

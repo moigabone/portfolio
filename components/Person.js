@@ -160,8 +160,8 @@ export function makePerson() {
 }
 
 // Petits gestes en boucle : respiration, frappe au clavier, regard qui se promène
-// De temps en temps, il se retourne vers le visiteur : quelques secondes toutes les 12 secondes
-const GLANCE = { every: 12, start: 2, hold: 3, ease: 0.9 }
+// De temps en temps, il se retourne vers le visiteur : quelques secondes toutes les 25 secondes
+const GLANCE = { every: 25, start: 6, hold: 3, ease: 0.9 }
 const smooth = (a, b, x) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)))
   return t * t * (3 - 2 * t)

@@ -23,7 +23,8 @@ import {
 } from "three"
 import { SECTIONS, NB_SECTIONS } from "./Sections"
 import { animatePerson, makePerson, setOpacity } from "./Person"
-import { animateCat, makeCat } from "./Cat"
+import { animateDog, makeDog } from "./Dog"
+import { earthTexture, makeBackpack, makeClock, makeEarth, makeGarland, makeMug, makeSwitch } from "./Decor"
 import { drawScreens, installScreens, screenContents } from "./Screens"
 import { scrollToSection } from "./Elevator"
 import { DAYLIGHT_SPEED } from "./theme"
@@ -34,7 +35,8 @@ const MODEL_ROTATION = -Math.PI / 3
 // Réglages de la caméra
 const VIEW_DIRECTION = new Vector3(0, 0.35, 1).normalize() // vue de face, légèrement en plongée
 const OVERVIEW_ZOOM = 0.75 // vue d'ensemble : l'immeuble entier est cadré
-const ROOM_ZOOM = 0.55 // < 1 : la caméra se rapproche de chaque pièce
+const ROOM_ZOOM = 0.68 // < 1 : la caméra se rapproche de chaque pièce
+const SIDE_SHIFT = 0.28 // décalage de la pièce à l'opposé de la carte de texte (0 : centrée)
 const MOBILE_ROOM_ZOOM = 0.8 // sur téléphone, la pièce n'a que le haut de l'écran : on la cadre en entier
 const PARALLAX = 0.08 // amplitude du mouvement de caméra qui suit la souris
 const ORBIT = { angle: 0.12, period: 40 } // la caméra va et vient autour de l'immeuble (radians, secondes par aller-retour)
@@ -57,7 +59,7 @@ const POSTER = { room: "chambre", material: "Matériau.027", vertices: 12 } // d
 const BEDSIDE_LAMP = { room: "chambre", material: "Matériau.027", vertices: 691 } // l'abat-jour s'allume
 const PLANTS = { material: "Matériau.022", vertices: 560 } // les feuilles se balancent
 const GLOBE = { material: "Matériau.008", vertices: 582 } // tourne, plus vite au survol
-const ECRITEL_LOGO = { material: "", vertices: 4 } // l'affiche du bureau : un clic mène à l'alternance
+const ECRITEL_LOGO = { material: "unnamed", vertices: 4 } // l'affiche du bureau : un clic mène à l'alternance
 const CHAIRS = {
   chambre: { material: "Matériau.041", vertices: 3311, scale: 1.2 }, // la chaise de la chambre est petite : on le grandit un peu
   classe: { material: "Matériau.015", vertices: 328 },
@@ -65,12 +67,24 @@ const CHAIRS = {
 }
 const DESK_HEIGHT = 0.75 // en mètres : sert à mettre le personnage à l'échelle de chaque pièce
 
-// Le chat : avancé vers le visiteur depuis le centre de la chambre, tourné vers lui
-const CAT = { forward: 0.9, facing: -Math.PI / 2.4, scale: 2, awakeSeconds: 4 }
+// Lego, mon chien : son panier est avancé vers le visiteur depuis le centre de la chambre, la tête vers lui
+const DOG = { forward: 0.9, facing: -Math.PI / 2.4, awakeSeconds: 4, phrase: "Wouf ! Moi, c'est Lego." }
+
+// Décor ajouté, placé par rapport à la chaise de chaque pièce (en mètres) :
+// `ahead` vers l'écran, `aside` sur le côté du personnage
+const MUG = { ahead: 0.42, aside: 0.32 }
+const SWITCH = { ahead: 0.5, aside: 0.8 }
+const BACKPACK = { ahead: -0.05, aside: 0.5 }
+const GARLAND = { above: 0.12, overhang: 0.15, sag: 0.12 } // au-dessus de la fenêtre de la chambre
+const WINDOW = { material: "Matériau.017", vertices: 1439 } // la fenêtre de la chambre
+const WHITEBOARD = { material: "Matériau.047", vertices: 830 } // le tableau de la classe, sous lequel on accroche l'horloge
+
+// Au survol, ces objets s'illuminent et une étiquette dit où ils mènent
+const LABELS = { banner: "Mes sites ↗", ecritel: "Mon alternance ↓", dog: "Lego" }
 
 // Interactions : ce que dit le personnage quand on clique sur lui, selon la pièce
 const PHRASES = {
-  chambre: "Ici, je code mes projets du soir, souvent avec Claude Code.",
+  chambre: "Le soir, je code mes propres projets : ce portfolio, le Codex, la Veille…",
   classe: "4e année à l'ESIEA, majeure cybersécurité. Diplôme en 2028 !",
   bureau: "Chez Ecritel, je construis des clusters de firewalls pour les clients.",
 }
@@ -189,8 +203,9 @@ function screenPoints(room) {
   return points
 }
 
-// Assoit le personnage sur la chaise de la pièce, tourné vers l'écran le plus proche
-function seatPerson(room, chairSpec) {
+// Repères d'une pièce, pris sur sa chaise et l'écran le plus proche (dans le repère du monde) :
+// le sol, le dessus du bureau, l'échelle (unités par mètre), la direction de l'écran et le côté
+function measure(room, chairSpec) {
   const chair = findMesh(room, chairSpec)
   const screens = screenPoints(room)
   if (!chair || !screens.length) return null
@@ -202,18 +217,59 @@ function seatPerson(room, chairSpec) {
   const screenCenter = screen.reduce((sum, p) => sum.add(p), new Vector3()).divideScalar(screen.length)
   // Le bas des écrans repose sur le bureau : de quoi en déduire l'échelle de la pièce
   const deskTop = Math.min(...screen.map((p) => p.y)) - 0.15
-  const scale = ((deskTop - seat.min.y) / DESK_HEIGHT) * (chairSpec.scale ?? 1)
   const facing = flat(screenCenter).sub(flat(center)).normalize()
+  return {
+    center,
+    floor: seat.min.y,
+    deskTop,
+    scale: (deskTop - seat.min.y) / DESK_HEIGHT,
+    facing,
+    side: new Vector3().crossVectors(WORLD_UP, facing),
+    yaw: Math.atan2(facing.x, facing.z),
+  }
+}
 
+// Pose un objet (fait en mètres) dans la pièce, à `ahead` / `aside` mètres de la chaise, à la hauteur `y`
+function place(room, m, object, { ahead, aside }, y) {
+  object.scale.setScalar(m.scale)
+  object.position.copy(m.center).addScaledVector(m.facing, ahead * m.scale).addScaledVector(m.side, aside * m.scale)
+  object.position.y = y
+  object.rotation.y = m.yaw
+  object.updateMatrixWorld(true)
+  room.attach(object)
+}
+
+// Assoit le personnage sur la chaise de la pièce, tourné vers l'écran le plus proche
+function seatPerson(room, m, bonus = 1) {
   const person = makePerson()
+  const scale = m.scale * bonus
   person.root.scale.setScalar(scale)
   // Agrandi, il garde les hanches sur l'assise : ses pieds passent sous le tapis
-  const sink = (scale - scale / (chairSpec.scale ?? 1)) * 0.5
-  person.root.position.set(center.x, seat.min.y - sink, center.z).addScaledVector(facing, -0.06 * scale)
-  person.root.rotation.y = Math.atan2(facing.x, facing.z)
+  const sink = (scale - m.scale) * 0.5
+  person.root.position.set(m.center.x, m.floor - sink, m.center.z).addScaledVector(m.facing, -0.06 * scale)
+  person.root.rotation.y = m.yaw
   person.root.updateMatrixWorld(true)
   room.attach(person.root)
   return person
+}
+
+// Repère d'un objet plat accroché au mur (tableau, fenêtre) : son centre, la normale vers la pièce, sa largeur et sa hauteur
+function wallFrame(mesh, roomCenter) {
+  mesh.geometry.computeBoundingBox()
+  const box = mesh.geometry.boundingBox
+  const size = box.getSize(new Vector3())
+  const thin = ["x", "y", "z"].reduce((a, b) => (size[a] < size[b] ? a : b))
+  const normal = new Vector3()
+  normal[thin] = 1
+  normal.transformDirection(mesh.matrixWorld)
+  const center = box.getCenter(new Vector3()).applyMatrix4(mesh.matrixWorld)
+  if (normal.dot(roomCenter.clone().sub(center)) < 0) normal.negate()
+  const right = new Vector3().crossVectors(WORLD_UP, normal).normalize()
+  const corners = [0, 1, 2, 3, 4, 5, 6, 7].map((k) =>
+    new Vector3(k & 1 ? box.max.x : box.min.x, k & 2 ? box.max.y : box.min.y, k & 4 ? box.max.z : box.min.z).applyMatrix4(mesh.matrixWorld).sub(center),
+  )
+  const extent = (axis) => Math.max(...corners.map((c) => Math.abs(c.dot(axis)))) * 2
+  return { center, normal, right, width: extent(right), height: extent(WORLD_UP), depth: extent(normal) }
 }
 
 // Poussière dorée qui flotte dans la pièce
@@ -277,7 +333,7 @@ function frame(shot, sphere, camera, size, axes, out) {
   if (isMobile) {
     out.target.addScaledVector(axes.up, -0.5 * distance * Math.tan(vFov / 2))
   } else {
-    out.target.addScaledVector(axes.right, (shot.right ? 0.42 : -0.42) * distance * Math.tan(hFov / 2))
+    out.target.addScaledVector(axes.right, (shot.right ? SIDE_SHIFT : -SIDE_SHIFT) * distance * Math.tan(hFov / 2))
   }
   out.position.copy(out.target).addScaledVector(axes.view, distance)
   out.distance = distance
@@ -316,11 +372,15 @@ export default function Apartment({ reducedMotion = false, day = false }) {
     hover: null,
     attention: ROOMS.map(() => 0),
     waves: ROOMS.map(() => -99),
-    catWake: -99,
+    dogWake: -99,
     globeSpin: 0,
+    glow: { banner: 0, ecritel: 0 },
+    box: new Box3(),
   })
+  const [label, setLabel] = useState(null)
+  const labelAnchor = useRef()
 
-  // Prépare le modèle une seule fois : centrage, ombres, couleurs, décor animé, personnage et chat
+  // Prépare le modèle une seule fois : centrage, ombres, couleurs, décor animé, personnage et Lego
   const world = useMemo(() => {
     // useGLTF garde la scène en cache : on ne la prépare qu'une fois, même si le composant remonte
     if (!scene.userData.world) {
@@ -350,12 +410,14 @@ export default function Apartment({ reducedMotion = false, day = false }) {
         object.attach(lamp)
         return { name, object, sphere, lamp, base: object.position.clone(), dust: makeDust(object) }
       })
-      const [chambre, , bureau] = rooms.map((r) => r.object)
+      const [chambre, classe, bureau] = rooms.map((r) => r.object)
 
-      // Le personnage d'abord : il se repère aux écrans, qui changent de matériau juste après
+      // Les repères et le personnage d'abord : ils se calent sur les écrans, qui changent de matériau juste après
+      const measures = rooms.map((r) => measure(r.object, CHAIRS[r.name]))
       const people = rooms.map((r, k) => {
-        const person = seatPerson(r.object, CHAIRS[r.name])
-        if (person) person.root.userData.action = { type: "person", room: k }
+        if (!measures[k]) return null
+        const person = seatPerson(r.object, measures[k], CHAIRS[r.name].scale)
+        person.root.userData.action = { type: "person", room: k }
         return person
       })
 
@@ -377,34 +439,88 @@ export default function Apartment({ reducedMotion = false, day = false }) {
       }
 
       const plants = rooms.map((r) => findMesh(r.object, PLANTS)).filter(Boolean).map((m) => pivotAt(m, "base"))
+      // Les globes gris deviennent des Terres qui tournent
+      const earthMap = earthTexture()
       const globes = rooms
-        .map((r) => findMesh(r.object, GLOBE))
-        .filter(Boolean)
-        .map((m) => {
-          m.userData.action = { type: "globe" }
-          return pivotAt(m, "center")
+        .map((r) => [r.object, findMesh(r.object, GLOBE)])
+        .filter(([, m]) => m)
+        .map(([room, m]) => {
+          const box = new Box3().setFromObject(m)
+          const size = box.getSize(new Vector3())
+          const earth = makeEarth(Math.min(size.x, size.y, size.z) / 2, earthMap)
+          earth.root.position.copy(box.getCenter(new Vector3()))
+          earth.root.updateMatrixWorld(true)
+          room.attach(earth.root)
+          earth.spinner.userData.action = { type: "globe" }
+          m.visible = false
+          return earth.spinner
         })
-      const logo = findMesh(bureau, ECRITEL_LOGO)
-      if (logo) logo.userData.action = { type: "ecritel" }
 
-      const banner = hangBanner(chambre)
-      if (banner) banner.userData.action = { type: "banner" }
+      // Ce qui mène ailleurs : s'illumine au survol (la texture elle-même brille)
+      const glowing = (mesh, type) => {
+        if (!mesh) return null
+        mesh.material = mesh.material.clone()
+        mesh.material.emissiveMap = mesh.material.map
+        mesh.material.emissive?.set("#ffffff")
+        mesh.material.emissiveIntensity = 0
+        mesh.userData.action = { type, object: mesh }
+        return mesh
+      }
+      const logo = glowing(findMesh(bureau, ECRITEL_LOGO), "ecritel")
+      const banner = glowing(hangBanner(chambre), "banner")
 
-      // Le chat dort sur le tapis, au milieu de la chambre, côté visiteur
-      const cat = makeCat()
-      const floor = new Box3().setFromObject(findMesh(chambre, CHAIRS.chambre)).min.y
+      // Lego dort dans son panier, au milieu de la chambre, côté visiteur
+      const lego = makeDog()
       const spot = new Box3()
         .setFromObject(chambre)
         .getCenter(new Vector3())
-        .add(new Vector3(VIEW_DIRECTION.x, 0, VIEW_DIRECTION.z).normalize().multiplyScalar(CAT.forward))
-      cat.root.position.set(spot.x, floor, spot.z)
-      cat.root.rotation.y = CAT.facing
-      cat.root.scale.setScalar(CAT.scale)
-      cat.root.userData.action = { type: "cat" }
-      cat.root.updateMatrixWorld(true)
-      chambre.attach(cat.root)
+        .add(new Vector3(VIEW_DIRECTION.x, 0, VIEW_DIRECTION.z).normalize().multiplyScalar(DOG.forward))
+      if (measures[0]) {
+        lego.root.position.set(spot.x, measures[0].floor, spot.z)
+        lego.root.scale.setScalar(measures[0].scale * 1.6)
+      }
+      lego.root.rotation.y = DOG.facing
+      lego.root.userData.action = { type: "dog", object: lego.root }
+      lego.root.updateMatrixWorld(true)
+      chambre.attach(lego.root)
 
-      scene.userData.world = { rooms, people, screens, bedside, plants, globes, banner, cat, overview: sphereOf(scene) }
+      // Décor ajouté : guirlande au-dessus de la fenêtre de la chambre, horloge en classe, sac, mug, switch
+      const decor = []
+      const windowMesh = findMesh(chambre, WINDOW)
+      if (windowMesh) {
+        const w = wallFrame(windowMesh, rooms[0].sphere.center)
+        const s = measures[0]?.scale ?? 1
+        const top = w.center.clone().addScaledVector(WORLD_UP, w.height / 2 + GARLAND.above * s).addScaledVector(w.normal, w.depth / 2 + 0.05 * s)
+        const half = w.right.clone().multiplyScalar(w.width / 2 + GARLAND.overhang * s)
+        const garland = makeGarland(top.clone().sub(half), top.clone().add(half), GARLAND.sag * s, s)
+        chambre.attach(garland.root)
+        decor.push(garland)
+      }
+      const board = findMesh(classe, WHITEBOARD)
+      if (board && measures[1]) {
+        const w = wallFrame(board, rooms[1].sphere.center)
+        const clock = makeClock()
+        clock.root.scale.setScalar(measures[1].scale)
+        clock.root.position.copy(w.center).addScaledVector(WORLD_UP, w.height / 2 + 0.24 * measures[1].scale).addScaledVector(w.normal, w.depth / 2 + 0.01)
+        clock.root.lookAt(clock.root.position.clone().add(w.normal))
+        clock.root.updateMatrixWorld(true)
+        classe.attach(clock.root)
+        decor.push(clock)
+      }
+      if (measures[1]) {
+        const backpack = makeBackpack()
+        place(classe, measures[1], backpack.root, BACKPACK, measures[1].floor)
+        decor.push(backpack)
+      }
+      if (measures[2]) {
+        const mug = makeMug()
+        place(bureau, measures[2], mug.root, MUG, measures[2].deskTop)
+        const netSwitch = makeSwitch()
+        place(bureau, measures[2], netSwitch.root, SWITCH, measures[2].deskTop)
+        decor.push(mug, netSwitch)
+      }
+
+      scene.userData.world = { rooms, people, screens, bedside, plants, globes, banner, logo, lego, decor, overview: sphereOf(scene) }
     }
 
     const { rooms, overview } = scene.userData.world
@@ -444,15 +560,15 @@ export default function Apartment({ reducedMotion = false, day = false }) {
     }
     return null
   }
-  const onPointerMove = (e) => {
-    const action = pick(e)
+  const hoverOn = (action) => {
     state.current.hover = action
     document.body.style.cursor = action ? "pointer" : ""
+    // L'étiquette ne change que quand on passe d'un objet à un autre (pas de rendu React à chaque mouvement)
+    const text = action && LABELS[action.type]
+    setLabel((current) => (current?.object === action?.object && current?.text === text ? current : text ? { text, object: action.object } : null))
   }
-  const onPointerLeave = () => {
-    state.current.hover = null
-    document.body.style.cursor = ""
-  }
+  const onPointerMove = (e) => hoverOn(pick(e))
+  const onPointerLeave = () => hoverOn(null)
   const onClick = (e) => {
     const action = pick(e)
     if (!action) return
@@ -461,9 +577,9 @@ export default function Apartment({ reducedMotion = false, day = false }) {
     if (action.type === "person") {
       s.waves[action.room] = now
       setBubble({ text: PHRASES[ROOMS[action.room]], target: "person", room: action.room, at: now })
-    } else if (action.type === "cat") {
-      s.catWake = now
-      setBubble({ text: "Miaou ?", target: "cat", at: now })
+    } else if (action.type === "dog") {
+      s.dogWake = now
+      setBubble({ text: DOG.phrase, target: "dog", at: now })
     } else if (action.type === "globe") {
       s.globeSpin = 1
     } else if (action.type === "banner") {
@@ -545,17 +661,30 @@ export default function Apartment({ reducedMotion = false, day = false }) {
       if (person.root.visible) animatePerson(person, time, k * 3.7, reducedMotion ? null : camera.position, { attention: s.attention[k], wave })
     })
 
-    // Le chat se réveille quand on clique dessus, ou quand le personnage de la chambre se retourne
+    // Lego se réveille quand on clique dessus, quand on le survole, ou quand le personnage de la chambre se retourne
     const turned = Math.max(s.attention[0], pulse(now - s.waves[0], WAVE_SECONDS))
-    animateCat(world.cat, time, reducedMotion ? 0 : Math.max(pulse(now - s.catWake, CAT.awakeSeconds), turned * 0.6))
+    const petted = s.hover?.type === "dog" ? 0.8 : 0
+    animateDog(world.lego, time, reducedMotion ? 0 : Math.max(pulse(now - s.dogWake, DOG.awakeSeconds), turned * 0.6, petted))
 
-    // Bulle au-dessus du personnage ou du chat
+    // Bulle au-dessus du personnage ou de Lego
     if (bubble && anchor.current) {
-      const target = bubble.target === "cat" ? world.cat.head : people[bubble.room]?.parts.head
+      const target = bubble.target === "dog" ? world.lego.head : people[bubble.room]?.parts.head
       if (target) {
         target.getWorldPosition(anchor.current.position)
-        anchor.current.position.y += target.getWorldScale(s.scale).y * (bubble.target === "cat" ? 0.25 : 0.32)
+        anchor.current.position.y += target.getWorldScale(s.scale).y * (bubble.target === "dog" ? 0.22 : 0.32)
       }
+    }
+
+    // Ce qui mène ailleurs s'illumine au survol, et son étiquette flotte au-dessus
+    for (const type of ["banner", "ecritel"]) {
+      s.glow[type] = MathUtils.damp(s.glow[type], s.hover?.type === type ? 1 : 0, 6, delta)
+      const mesh = type === "banner" ? world.banner : world.logo
+      if (mesh) mesh.material.emissiveIntensity = s.glow[type] * 0.45
+    }
+    if (label && labelAnchor.current) {
+      s.box.setFromObject(label.object)
+      s.box.getCenter(labelAnchor.current.position)
+      labelAnchor.current.position.y = s.box.max.y
     }
 
     // Décor : plantes, globes, bannière, écrans, lampe de chevet, poussière
@@ -566,9 +695,12 @@ export default function Apartment({ reducedMotion = false, day = false }) {
     s.globeSpin = MathUtils.damp(s.globeSpin, s.hover?.type === "globe" ? 0.5 : 0, 1.2, delta)
     if (!reducedMotion) world.globes.forEach((g) => (g.rotation.y += delta * (0.25 + s.globeSpin * 8)))
     if (world.banner) {
-      world.banner.rotation.x = -(0.5 + 0.5 * Math.sin(time * 0.7)) * 0.08
-      world.banner.rotation.z = Math.sin(time * 0.45) * 0.015
+      // Au survol, la bannière ondule davantage, comme soulevée par un courant d'air
+      const sway = 1 + s.glow.banner * 1.5
+      world.banner.rotation.x = -(0.5 + 0.5 * Math.sin(time * (0.7 + s.glow.banner))) * 0.08 * sway
+      world.banner.rotation.z = Math.sin(time * 0.45) * 0.015 * sway
     }
+    world.decor.forEach((d) => d.animate(time, night))
     drawScreens(world.screens, time, now)
     for (const screen of world.screens) screen.material.color.setScalar(0.8 + 0.2 * night)
     if (world.bedside) {
@@ -592,6 +724,13 @@ export default function Apartment({ reducedMotion = false, day = false }) {
             <div className="bubble" role="status">
               {bubble.text}
             </div>
+          </Html>
+        </group>
+      )}
+      {label && (
+        <group ref={labelAnchor}>
+          <Html center portal={{ current: gl.domElement.parentNode }} zIndexRange={[34, 0]} style={{ pointerEvents: "none" }}>
+            <div className="hover-label">{label.text}</div>
           </Html>
         </group>
       )}

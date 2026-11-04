@@ -190,8 +190,8 @@ const CODE = [
   "}",
   "",
   "> claude",
-  "  Ajoute un chat noir dans la chambre",
-  "  ✓ components/Cat.js créé",
+  "  Ajoute Lego, mon Jack Russell",
+  "  ✓ components/Dog.js créé",
 ]
 
 function editor(g, x, t) {
