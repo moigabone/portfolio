@@ -17,7 +17,8 @@ export default function Overlay() {
     const position = scroll.offset * (NB_SECTIONS - 1)
     sections.current.forEach((el, i) => {
       if (!el) return
-      const opacity = Math.max(0, 1 - Math.abs(position - i) * FADE_SPEED)
+      // Elles s'effacent aussi quand on examine un objet de près (scroll.inspect, écrit par Apartment)
+      const opacity = Math.max(0, 1 - Math.abs(position - i) * FADE_SPEED) * (1 - (scroll.inspect ?? 0))
       el.style.opacity = opacity
       el.style.pointerEvents = opacity > 0.5 ? "auto" : "none"
     })

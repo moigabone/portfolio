@@ -139,3 +139,10 @@ html[data-theme="day"] body::after { display: none; }
   white-space: nowrap;
   pointer-events: none;
 }
+
+/* Pendant l'examen d'un objet : comment revenir, sous l'objet */
+.inspect-hint {
+  transform: translateY(120%);
+  color: var(--color-ink);
+  font-weight: 500;
+}

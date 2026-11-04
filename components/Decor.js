@@ -5,6 +5,7 @@ import {
   CircleGeometry,
   ConeGeometry,
   CylinderGeometry,
+  DoubleSide,
   Group,
   LatheGeometry,
   Mesh,
@@ -313,6 +314,7 @@ export function makeMug() {
   root.add(cup)
   const print = new Mesh(new CylinderGeometry(0.0425, 0.0405, 0.05, 24, 1, true), new MeshStandardMaterial({ map: mugPrint(), roughness: 0.4 }))
   print.position.y = 0.055
+  print.rotation.y = Math.PI / 2 // un des deux motifs face au personnage (-z), l'autre côté mur
   root.add(print)
   const coffee = new Mesh(new CylinderGeometry(0.036, 0.036, 0.004, 18), new MeshStandardMaterial({ color: "#3b2416" }))
   coffee.position.y = 0.092
@@ -893,5 +895,164 @@ export function makeNotebook() {
   pen.position.set(0.25, 0.006, 0.02)
   root.add(pen)
   root.traverse((c) => c.isMesh && (c.castShadow = true))
+  return { root, animate() {} }
+}
+
+// --- La PS Vita blanche et bleu clair, posée sur la table de nuit ---
+
+function vitaScreen() {
+  const canvas = document.createElement("canvas")
+  canvas.width = 256
+  canvas.height = 144
+  const g = canvas.getContext("2d")
+  const sky = g.createLinearGradient(0, 0, 256, 144)
+  sky.addColorStop(0, "#bfe6ff")
+  sky.addColorStop(1, "#5aa8e6")
+  g.fillStyle = sky
+  g.fillRect(0, 0, 256, 144)
+  // L'écran d'accueil : des bulles d'applications
+  const colors = ["#ffffff", "#ffd36a", "#ff7ad0", "#7fe0a0", "#1a1d6a", "#ff9a3a"]
+  for (let k = 0; k < 9; k++) {
+    g.fillStyle = colors[k % colors.length]
+    g.beginPath()
+    g.arc(40 + (k % 5) * 44 + (k > 4 ? 22 : 0), k > 4 ? 98 : 50, 15, 0, Math.PI * 2)
+    g.fill()
+  }
+  const texture = new CanvasTexture(canvas)
+  texture.colorSpace = SRGBColorSpace
+  return texture
+}
+
+export function makePSVita() {
+  const root = new Group()
+  const white = new MeshStandardMaterial({ color: "#f4f6f8", roughness: 0.25, metalness: 0.1 })
+  const blue = new MeshStandardMaterial({ color: "#9fd4f5", roughness: 0.35 })
+  // Coque arrondie : blanche dessus, bleu clair dessous
+  for (const [material, y, h] of [[blue, 0.004, 0.008], [white, 0.0125, 0.009]]) {
+    const middle = new Mesh(new BoxGeometry(0.13, h, 0.083), material)
+    middle.position.y = y
+    root.add(middle)
+    for (const x of [-0.065, 0.065]) {
+      const end = new Mesh(new CylinderGeometry(0.0415, 0.0415, h, 24), material)
+      end.position.set(x, y, 0)
+      root.add(end)
+    }
+  }
+  const screen = new Mesh(new PlaneGeometry(0.1, 0.057), new MeshBasicMaterial({ map: vitaScreen(), toneMapped: false }))
+  screen.rotation.x = -Math.PI / 2
+  screen.position.y = 0.0172
+  root.add(screen)
+  // Joysticks, croix directionnelle et boutons, en bleu clair
+  for (const x of [-0.078, 0.078]) {
+    const stick = new Mesh(new CylinderGeometry(0.008, 0.009, 0.006, 16), blue)
+    stick.position.set(x, 0.019, 0.022)
+    root.add(stick)
+  }
+  for (const [w, d] of [[0.022, 0.007], [0.007, 0.022]]) {
+    const pad = new Mesh(new BoxGeometry(w, 0.003, d), blue)
+    pad.position.set(-0.078, 0.0175, -0.012)
+    root.add(pad)
+  }
+  for (const [x, z] of [[0, -0.009], [0, 0.009], [-0.009, 0], [0.009, 0]]) {
+    const button = new Mesh(new CylinderGeometry(0.0035, 0.0035, 0.003, 12), blue)
+    button.position.set(0.078 + x, 0.0175, -0.012 + z)
+    root.add(button)
+  }
+  root.traverse((c) => c.isMesh && (c.castShadow = true))
+  return { root, animate() {} }
+}
+
+// --- La lampe champignon orange, en verre, sur la table de nuit ---
+
+export function makeMushroomLamp() {
+  const root = new Group()
+  const glass = new MeshStandardMaterial({ color: "#ff7a1a", emissive: "#ff6a10", emissiveIntensity: 0.8, roughness: 0.15, transparent: true, opacity: 0.9, side: DoubleSide })
+  const profile = [[0, 0], [0.065, 0], [0.066, 0.008], [0.04, 0.03], [0.028, 0.08], [0.026, 0.17], [0.03, 0.19], [0.125, 0.2], [0.124, 0.212]]
+  // Le chapeau : un dôme
+  for (let k = 1; k <= 12; k++) {
+    const a = (k / 12) * (Math.PI / 2)
+    profile.push([Math.cos(a) * 0.122, 0.212 + Math.sin(a) * 0.1])
+  }
+  root.add(new Mesh(new LatheGeometry(profile.map(([r, y]) => new Vector2(r, y)), 32), glass))
+  return { root, glass, bulb: new Vector3(0, 0.24, 0) }
+}
+
+// --- Plante tombante, ses tiges pendent sur le devant de l'étagère (+z) ---
+
+export function makeTrailingPlant() {
+  const root = new Group()
+  const pot = new Mesh(new CylinderGeometry(0.06, 0.045, 0.1, 20), new MeshStandardMaterial({ color: "#f2ede4", roughness: 0.7 }))
+  pot.position.y = 0.05
+  root.add(pot)
+  const soil = new Mesh(new CylinderGeometry(0.056, 0.056, 0.01, 20), new MeshStandardMaterial({ color: "#3b2416" }))
+  soil.position.y = 0.096
+  root.add(soil)
+  const leafColors = ["#3f8f3a", "#58a84a", "#2f7a35"].map((color) => new MeshStandardMaterial({ color, roughness: 0.7 }))
+  const stem = new MeshStandardMaterial({ color: "#3a6b2a" })
+  const vines = []
+  for (let k = 0; k < 7; k++) {
+    const a = -1.2 + (k / 6) * 2.4 // en éventail vers l'avant
+    const out = new Vector3(Math.sin(a), 0, Math.cos(a))
+    const length = 0.2 + ((k * 37) % 5) * 0.05
+    const pivot = new Group()
+    pivot.position.set(out.x * 0.05, 0.1, out.z * 0.05)
+    root.add(pivot)
+    const curve = new CatmullRomCurve3([
+      new Vector3(0, 0, 0),
+      out.clone().multiplyScalar(0.05).add(new Vector3(0, 0.01, 0)),
+      out.clone().multiplyScalar(0.08).add(new Vector3(0, -0.06, 0)),
+      out.clone().multiplyScalar(0.1).add(new Vector3(0, -length, 0)),
+    ])
+    pivot.add(new Mesh(new TubeGeometry(curve, 16, 0.0025, 4), stem))
+    for (let i = 1; i <= 8; i++) {
+      const leaf = new Mesh(new SphereGeometry(0.016, 8, 6), leafColors[(i + k) % 3])
+      leaf.position.copy(curve.getPoint(i / 8.5))
+      leaf.scale.set(1, 0.35, 0.8)
+      leaf.rotation.set(i * 0.7, i * 1.3, 0)
+      pivot.add(leaf)
+    }
+    vines.push(pivot)
+  }
+  // Quelques feuilles dressées au-dessus du pot
+  for (let i = 0; i < 6; i++) {
+    const leaf = new Mesh(new SphereGeometry(0.02, 8, 6), leafColors[i % 3])
+    leaf.position.set(Math.cos(i) * 0.03, 0.115 + (i % 2) * 0.012, Math.sin(i) * 0.03)
+    leaf.scale.set(1, 0.4, 0.7)
+    leaf.rotation.set(0.4, i, 0.3)
+    root.add(leaf)
+  }
+  return {
+    root,
+    animate(time) {
+      vines.forEach((v, k) => (v.rotation.x = Math.sin(time * 0.6 + k * 1.7) * 0.06))
+    },
+  }
+}
+
+// --- Les DVD de la deuxième étagère : la tranche vers la pièce (+z) ---
+
+export const DVDS = [
+  { title: "FIGHT CLUB", volume: "", paper: "#1a1416", ink: "#ff6fae", weight: "bold" },
+  { title: "PAPRIKA", volume: "", paper: "#d9342b", ink: "#fff1cf", weight: "bold" },
+  { title: "her", volume: "", paper: "#e2563f", ink: "#ffffff", weight: "" },
+  { title: "SNATCH", volume: "", paper: "#202226", ink: "#f2a93b", weight: "bold" },
+]
+
+export function makeDVDs() {
+  const root = new Group()
+  const plastic = new MeshStandardMaterial({ color: "#101114", roughness: 0.4 })
+  DVDS.forEach((dvd, k) => {
+    const spine = new MeshStandardMaterial({ map: bookTexture(dvd, 0.015 / 0.19), roughness: 0.4 })
+    // Faces : +x, -x, +y, -y, +z (la tranche), -z
+    const box = new Mesh(new BoxGeometry(0.015, 0.19, 0.135), [plastic, plastic, plastic, plastic, spine, plastic])
+    box.position.set(k * 0.017, 0.095, 0)
+    box.castShadow = true
+    root.add(box)
+  })
+  // Un dernier boîtier couché devant, pour le désordre
+  const lying = new Mesh(new BoxGeometry(0.135, 0.015, 0.19), [plastic, plastic, new MeshStandardMaterial({ color: "#2a2d36" }), plastic, plastic, plastic])
+  lying.position.set(0.15, 0.0075, 0.01)
+  lying.rotation.y = 0.2
+  root.add(lying)
   return { root, animate() {} }
 }
