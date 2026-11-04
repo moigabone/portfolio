@@ -282,68 +282,81 @@ export function makeBackpack() {
   return { root, animate() {} }
 }
 
-// --- Mug fumant sur le bureau ---
+// --- Au bureau : une bouteille d'eau et une banane ---
 
-// Le motif du mug, imprimé deux fois pour qu'on le voie de tous les côtés
-function mugPrint() {
+export function makeWaterBottle() {
+  const root = new Group()
+  const profile = (points) => points.map(([r, y]) => new Vector2(r, y))
+  // Bouteille en plastique transparent, l'eau aux deux tiers
+  const plastic = new MeshStandardMaterial({ color: "#e8f6ff", roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.3, depthWrite: false, side: DoubleSide })
+  root.add(new Mesh(new LatheGeometry(profile([[0, 0], [0.034, 0], [0.036, 0.01], [0.036, 0.16], [0.03, 0.19], [0.014, 0.215], [0.013, 0.225]]), 24), plastic))
+  const water = new MeshStandardMaterial({ color: "#7cc8f2", roughness: 0.1, transparent: true, opacity: 0.55, depthWrite: false })
+  root.add(new Mesh(new LatheGeometry(profile([[0, 0.004], [0.032, 0.004], [0.033, 0.012], [0.033, 0.13], [0, 0.13]]), 24), water))
+  // Bouchon bleu et étiquette avec une goutte
+  const cap = new Mesh(new CylinderGeometry(0.015, 0.015, 0.018, 16), new MeshStandardMaterial({ color: "#2a6cff", roughness: 0.4 }))
+  cap.position.y = 0.234
+  root.add(cap)
   const canvas = document.createElement("canvas")
   canvas.width = 512
-  canvas.height = 128
+  canvas.height = 96
   const g = canvas.getContext("2d")
-  g.fillStyle = "#1a1d6a"
-  g.fillRect(0, 0, 512, 128)
-  g.fillStyle = "#ffd36a"
-  g.textAlign = "center"
-  g.textBaseline = "middle"
+  g.fillStyle = "#ffffff"
+  g.fillRect(0, 0, 512, 96)
   for (const x of [128, 384]) {
-    g.font = "bold 44px monospace"
-    g.fillText("</>", x, 50)
-    g.font = "bold 22px monospace"
-    g.fillText("sudo café", x, 98)
+    g.fillStyle = "#2a6cff"
+    g.beginPath()
+    g.moveTo(x - 50, 18)
+    g.quadraticCurveTo(x - 30, 48, x - 50, 78)
+    g.quadraticCurveTo(x - 70, 48, x - 50, 18)
+    g.fill()
+    g.font = "bold 34px sans-serif"
+    g.textBaseline = "middle"
+    g.fillText("EAU", x - 22, 50)
   }
   const texture = new CanvasTexture(canvas)
   texture.colorSpace = SRGBColorSpace
-  return texture
+  const label = new Mesh(new CylinderGeometry(0.0365, 0.0365, 0.045, 24, 1, true), new MeshStandardMaterial({ map: texture, roughness: 0.6 }))
+  label.position.y = 0.09
+  label.rotation.y = Math.PI / 2 // une goutte face au personnage (-z)
+  root.add(label)
+  return { root, animate() {} }
 }
 
-export function makeMug() {
-  const root = new Group()
-  const ceramic = new MeshStandardMaterial({ color: "#1a1d6a", roughness: 0.4 })
-  const cup = new Mesh(new CylinderGeometry(0.042, 0.038, 0.1, 18), ceramic)
-  cup.position.y = 0.05
-  root.add(cup)
-  const print = new Mesh(new CylinderGeometry(0.0425, 0.0405, 0.05, 24, 1, true), new MeshStandardMaterial({ map: mugPrint(), roughness: 0.4 }))
-  print.position.y = 0.055
-  print.rotation.y = Math.PI / 2 // un des deux motifs face au personnage (-z), l'autre côté mur
-  root.add(print)
-  const coffee = new Mesh(new CylinderGeometry(0.036, 0.036, 0.004, 18), new MeshStandardMaterial({ color: "#3b2416" }))
-  coffee.position.y = 0.092
-  root.add(coffee)
-  const rim = new Mesh(new TorusGeometry(0.04, 0.004, 6, 18), new MeshStandardMaterial({ color: "#ffd36a", metalness: 0.6, roughness: 0.3 }))
-  rim.rotation.x = Math.PI / 2
-  rim.position.y = 0.1
-  root.add(rim)
-  const handle = new Mesh(new TorusGeometry(0.025, 0.007, 6, 12), ceramic)
-  handle.position.set(0.05, 0.055, 0)
-  root.add(handle)
-  cup.castShadow = true
-  // Volutes de vapeur qui montent et s'effacent
-  const puffs = [0, 1, 2, 3].map((i) => {
-    const puff = new Mesh(new SphereGeometry(0.018, 8, 6), new MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0, depthWrite: false }))
-    root.add(puff)
-    return { puff, phase: i / 4 }
+// Banane couchée sur le bureau : un fuseau à cinq pans, plus fin aux deux bouts, courbé à plat dans le plan du bureau
+export function makeBanana() {
+  const radius = 0.021, length = 0.17, bend = 0.13 // en mètres ; bend : rayon de la courbure
+  const half = length / 2 + radius
+  const rings = Array.from({ length: 25 }, (_, i) => {
+    const t = (i / 24) * 2 - 1
+    return new Vector2(radius * Math.sqrt(1 - t * t) * (1 - 0.15 * t * t) + (Math.abs(t) === 1 ? 0 : 0.001), t * half)
   })
-  return {
-    root,
-    animate(time) {
-      for (const { puff, phase } of puffs) {
-        const p = (time * 0.35 + phase) % 1
-        puff.position.set(Math.sin(p * 6 + phase * 9) * 0.015, 0.11 + p * 0.16, Math.cos(p * 5) * 0.01)
-        puff.scale.setScalar(0.6 + p * 1.6)
-        puff.material.opacity = Math.sin(p * Math.PI) * 0.35
-      }
-    },
+  const geometry = new LatheGeometry(rings, 5)
+  const pos = geometry.attributes.position
+  const v = new Vector3()
+  // Un point le long de l'arc : `along` de -half à +half, `out` vers l'extérieur de la courbe
+  const arc = (along, out, up) => {
+    const a = along / bend
+    return new Vector3((bend + out) * Math.sin(a), up, (bend + out) * Math.cos(a) - bend)
   }
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i)
+    pos.setXYZ(i, ...arc(v.y, v.x, v.z * 0.9 + radius * 0.85).toArray())
+  }
+  geometry.computeVertexNormals()
+  const root = new Group()
+  const banana = new Mesh(geometry, new MeshStandardMaterial({ color: "#ffd84a", roughness: 0.55, flatShading: true }))
+  banana.castShadow = true
+  root.add(banana)
+  // Le bout brun et la queue verte
+  const tip = new Mesh(new SphereGeometry(0.008, 8, 6), new MeshStandardMaterial({ color: "#5a3a1a", roughness: 0.8 }))
+  tip.position.copy(arc(-half + 0.004, 0, radius * 0.85))
+  root.add(tip)
+  const stem = new Mesh(new CylinderGeometry(0.004, 0.006, 0.022, 6), new MeshStandardMaterial({ color: "#7a8a3a" }))
+  const end = half + 0.005
+  stem.position.copy(arc(end, 0, radius * 0.85))
+  stem.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), new Vector3(Math.cos(end / bend), 0, -Math.sin(end / bend)))
+  root.add(stem)
+  return { root, animate() {} }
 }
 
 // --- Switch réseau aux diodes qui clignotent, sur le bureau du NOC ---
@@ -534,13 +547,14 @@ export function fourierTexture(aspect) {
 
 // --- Les livres de l'étagère de la chambre ---
 
+// Les romans de l'étagère du haut (les mangas sont sur celle du bas, voir MANGAS)
 export const BOOKS = [
-  { title: "BERSERK", volume: "1", paper: "#141214", ink: "#c0392b", weight: "bold" },
-  { title: "BERSERK", volume: "2", paper: "#141214", ink: "#c0392b", weight: "bold" },
-  { title: "NARUTO", volume: "1", paper: "#f07a1a", ink: "#1a1412", weight: "bold" },
-  { title: "NARUTO", volume: "2", paper: "#f07a1a", ink: "#1a1412", weight: "bold" },
+  { title: "LE PETIT PRINCE", volume: "", paper: "#f6f1e6", ink: "#1d3f8a", weight: "bold" },
+  { title: "L'ALCHIMISTE", volume: "", paper: "#e9d8a6", ink: "#8a3a1a", weight: "bold" },
+  { title: "LE HOBBIT", volume: "", paper: "#6b4a2a", ink: "#e8c66a", weight: "bold" },
   { title: "LE SEIGNEUR DES ANNEAUX", volume: "", paper: "#1f3a2a", ink: "#e8c66a", weight: "" },
-  { title: "HARRY POTTER", volume: "", paper: "#7a1a1a", ink: "#ffd36a", weight: "bold" },
+  { title: "HARRY POTTER", volume: "1", paper: "#7a1a1a", ink: "#ffd36a", weight: "bold" },
+  { title: "HARRY POTTER", volume: "2", paper: "#1f3a6b", ink: "#ffd36a", weight: "bold" },
 ]
 
 // Tranche d'un livre, à la proportion `aspect` (largeur / hauteur) : titre vertical, numéro en bas
@@ -1031,28 +1045,145 @@ export function makeTrailingPlant() {
 
 // --- Les DVD de la deuxième étagère : la tranche vers la pièce (+z) ---
 
+// Couleurs reprises des affiches
 export const DVDS = [
+  { title: "LES ÉVADÉS", volume: "", paper: "#1b2a4a", ink: "#e8eef8", weight: "bold" },
+  { title: "LE PARRAIN", volume: "", paper: "#0d0d0d", ink: "#f0f0f0", weight: "" },
+  { title: "MEMORIES OF MURDER", volume: "", paper: "#2b2f2a", ink: "#e6e2d6", weight: "" },
+  { title: "SEVEN", volume: "", paper: "#b8401a", ink: "#f6e7c8", weight: "bold" },
   { title: "FIGHT CLUB", volume: "", paper: "#1a1416", ink: "#ff6fae", weight: "bold" },
+  { title: "ONCE UPON A TIME IN HOLLYWOOD", volume: "", paper: "#e8b04a", ink: "#7a1f1a", weight: "bold" },
   { title: "PAPRIKA", volume: "", paper: "#d9342b", ink: "#fff1cf", weight: "bold" },
   { title: "her", volume: "", paper: "#e2563f", ink: "#ffffff", weight: "" },
-  { title: "SNATCH", volume: "", paper: "#202226", ink: "#f2a93b", weight: "bold" },
+  { title: "SNATCH", volume: "", paper: "#f2f0ea", ink: "#d49a10", weight: "bold" },
 ]
 
-export function makeDVDs() {
+export const MANGAS = [
+  { title: "BERSERK", volume: "1", paper: "#141214", ink: "#c0392b", weight: "bold" },
+  { title: "BERSERK", volume: "2", paper: "#141214", ink: "#c0392b", weight: "bold" },
+  { title: "NARUTO", volume: "1", paper: "#f07a1a", ink: "#1a1412", weight: "bold" },
+  { title: "NARUTO", volume: "2", paper: "#f07a1a", ink: "#1a1412", weight: "bold" },
+  { title: "ONE PIECE", volume: "1", paper: "#f4f4f4", ink: "#d62828", weight: "bold" },
+  { title: "ONE PIECE", volume: "2", paper: "#f4f4f4", ink: "#d62828", weight: "bold" },
+  { title: "DRAGON BALL Z", volume: "1", paper: "#ffd23a", ink: "#d62828", weight: "bold" },
+  { title: "HUNTER × HUNTER", volume: "1", paper: "#2c7a3f", ink: "#ffffff", weight: "bold" },
+  { title: "CHAINSAW MAN", volume: "1", paper: "#e94b2a", ink: "#141414", weight: "bold" },
+]
+
+// Une rangée de boîtiers ou de volumes debout, la tranche vers la pièce (+z) ; tailles en mètres
+function makeSpines(items, { height, depth, thick, cover }) {
   const root = new Group()
-  const plastic = new MeshStandardMaterial({ color: "#101114", roughness: 0.4 })
-  DVDS.forEach((dvd, k) => {
-    const spine = new MeshStandardMaterial({ map: bookTexture(dvd, 0.015 / 0.19), roughness: 0.4 })
+  const back = new MeshStandardMaterial({ color: cover, roughness: 0.5 })
+  items.forEach((item, k) => {
+    const spine = new MeshStandardMaterial({ map: bookTexture(item, thick / height), roughness: 0.5 })
     // Faces : +x, -x, +y, -y, +z (la tranche), -z
-    const box = new Mesh(new BoxGeometry(0.015, 0.19, 0.135), [plastic, plastic, plastic, plastic, spine, plastic])
-    box.position.set(k * 0.017, 0.095, 0)
+    const box = new Mesh(new BoxGeometry(thick, height, depth), [back, back, back, back, spine, back])
+    box.position.set(k * (thick + 0.002), height / 2, 0)
     box.castShadow = true
     root.add(box)
   })
-  // Un dernier boîtier couché devant, pour le désordre
-  const lying = new Mesh(new BoxGeometry(0.135, 0.015, 0.19), [plastic, plastic, new MeshStandardMaterial({ color: "#2a2d36" }), plastic, plastic, plastic])
-  lying.position.set(0.15, 0.0075, 0.01)
-  lying.rotation.y = 0.2
-  root.add(lying)
   return { root, animate() {} }
+}
+
+export const makeDVDs = () => makeSpines(DVDS, { height: 0.19, depth: 0.135, thick: 0.015, cover: "#101114" })
+export const makeMangas = () => makeSpines(MANGAS, { height: 0.18, depth: 0.115, thick: 0.017, cover: "#f2efe8" })
+
+// --- Le tapis persan de la chambre, dans les marrons foncés ---
+
+// `aspect` : longueur / largeur du tapis ; le tapis est dessiné dans la longueur (vertical sur le canevas)
+export function persianRugTexture(aspect) {
+  const w = 512, h = Math.round(512 * Math.max(1, aspect))
+  const canvas = document.createElement("canvas")
+  canvas.width = w
+  canvas.height = h
+  const g = canvas.getContext("2d")
+  const C = { ground: "#2b140d", field: "#4a2318", rust: "#8a2e1c", red: "#a8432a", cream: "#d9c09a", navy: "#2a3550", dark: "#3a1a12" }
+  const diamond = (x, y, rx, ry, color) => {
+    g.fillStyle = color
+    g.beginPath()
+    g.moveTo(x, y - ry)
+    g.lineTo(x + rx, y)
+    g.lineTo(x, y + ry)
+    g.lineTo(x - rx, y)
+    g.closePath()
+    g.fill()
+  }
+  const rosette = (x, y, r, color, heart) => {
+    g.fillStyle = color
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2
+      g.beginPath()
+      g.arc(x + Math.cos(a) * r * 0.6, y + Math.sin(a) * r * 0.6, r * 0.35, 0, Math.PI * 2)
+      g.fill()
+    }
+    g.fillStyle = heart
+    g.beginPath()
+    g.arc(x, y, r * 0.4, 0, Math.PI * 2)
+    g.fill()
+  }
+  g.fillStyle = C.ground
+  g.fillRect(0, 0, w, h)
+  const fringe = 0
+  // Bordure : une bande rouille entre deux filets crème, avec une frise de losanges
+  const inset = (k) => [w * k, fringe + w * k] // des bandes de même épaisseur sur les quatre côtés
+  const frame = (k, color) => {
+    const [x, y] = inset(k)
+    g.fillStyle = color
+    g.fillRect(x, y, w - 2 * x, h - 2 * y)
+  }
+  frame(0.03, C.cream)
+  frame(0.04, C.rust)
+  frame(0.12, C.cream)
+  frame(0.13, C.field)
+  const [bx, by] = inset(0.04), [ix, iy] = inset(0.12)
+  const band = (ix - bx) / 2
+  for (let x = bx + band; x < w - bx; x += band * 2) {
+    for (const y of [by + band, h - by - band]) {
+      diamond(x, y, band * 0.7, band * 0.7, C.cream)
+      diamond(x, y, band * 0.35, band * 0.35, C.dark)
+    }
+  }
+  for (let y = by + band * 3; y < h - by - band * 2; y += band * 2) {
+    for (const x of [bx + band, w - bx - band]) {
+      diamond(x, y, band * 0.7, band * 0.7, C.cream)
+      diamond(x, y, band * 0.35, band * 0.35, C.dark)
+    }
+  }
+  // Champ : petits motifs semés
+  const [fx, fy] = inset(0.13)
+  const cx = w / 2, cy = h / 2
+  for (let y = fy + 30; y < h - fy - 20; y += 44) {
+    for (let x = fx + 26 + ((y / 44) % 2) * 22; x < w - fx - 20; x += 44) {
+      if (Math.abs(x - cx) / (w * 0.3) + Math.abs(y - cy) / (h * 0.26) < 1.05) continue
+      if ((x + y) % 3 < 1) rosette(x, y, 9, C.red, C.cream)
+      else diamond(x, y, 6, 9, (x * y) % 2 ? C.cream : C.rust)
+    }
+  }
+  // Écoinçons : un quart de médaillon dans chaque coin du champ
+  for (const [x, y, sx, sy] of [[fx, fy, 1, 1], [w - fx, fy, -1, 1], [fx, h - fy, 1, -1], [w - fx, h - fy, -1, -1]]) {
+    g.fillStyle = C.rust
+    g.beginPath()
+    g.moveTo(x, y)
+    g.lineTo(x + sx * w * 0.22, y)
+    g.lineTo(x, y + sy * w * 0.22)
+    g.closePath()
+    g.fill()
+    g.strokeStyle = C.cream
+    g.lineWidth = 3
+    g.stroke()
+    rosette(x + sx * w * 0.06, y + sy * w * 0.06, 10, C.cream, C.navy)
+  }
+  // Médaillon central en losanges emboîtés, avec ses pendentifs
+  const rx = w * 0.3, ry = h * 0.26
+  for (const [k, color] of [[1, C.cream], [0.94, C.rust], [0.7, C.dark], [0.64, C.red], [0.4, C.cream], [0.34, C.navy]]) diamond(cx, cy, rx * k, ry * k, color)
+  rosette(cx, cy, 20, C.cream, C.red)
+  for (const s of [-1, 1]) {
+    diamond(cx, cy + s * ry * 1.12, 22, 30, C.cream)
+    diamond(cx, cy + s * ry * 1.12, 14, 20, C.rust)
+    for (const t of [-1, 1]) rosette(cx + t * rx * 0.5, cy + s * ry * 0.5, 9, C.cream, C.dark)
+  }
+  const texture = new CanvasTexture(canvas)
+  texture.colorSpace = SRGBColorSpace
+  texture.anisotropy = 8
+  return texture
 }

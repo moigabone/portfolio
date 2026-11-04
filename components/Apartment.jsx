@@ -41,13 +41,16 @@ import {
   makeHeadset,
   makeDVDs,
   makeLavaLamp,
+  makeMangas,
   makeMushroomLamp,
   makePSVita,
   makeTrailingPlant,
-  makeMug,
+  makeBanana,
   makeNotebook,
   makeSchoolPC,
   makeSwitch,
+  makeWaterBottle,
+  persianRugTexture,
 } from "./Decor"
 import { drawScreens, installScreens, screenContents } from "./Screens"
 import { scrollToSection } from "./Elevator"
@@ -87,8 +90,11 @@ const NIGHTSTAND_BOOKS = [
   { material: "Matériau.022", vertices: 279 },
   { material: "Matériau.023", vertices: 285 },
 ] // les livres posés sur la table de nuit : la PS Vita prend leur place
+const RUG = { material: "Matériau.021", vertices: 1793, flat: 0.1 } // le tapis de la chambre ; flat : épaisseur du tapis (unités de l'objet), au-dessus c'est un autre petit objet du même maillage
 const SHELF = { material: "Matériau.023", vertices: 458 } // l'étagère de la chambre, dupliquée plus bas
-const LOWER_SHELF = { drop: 0.55, plant: -0.28, dvds: 0.05 } // en mètres : sous la première ; la plante à gauche, les DVD à droite
+const LOWER_SHELF = { drop: 0.55, plant: -0.34, mangas: -0.17, dvds: 0.12 } // en mètres : sous la première ; la plante à gauche, puis les mangas et les DVD
+// Agrandis pour aller avec le reste du modèle (les livres de l'étagère font 37 cm)
+const SIZES = { dvds: 1.6, mangas: 1.6, plant: 1.6, lamp: 1.4, vita: 1.8 }
 const PLANTS = { material: "Matériau.022", vertices: 560 } // les feuilles se balancent
 const GLOBE = { material: "Matériau.008", vertices: 582 } // tourne, plus vite au survol
 const ECRITEL_LOGO = { material: "unnamed", vertices: 4 } // l'affiche du bureau : un clic mène à l'alternance
@@ -111,7 +117,8 @@ const DOG = { forward: 0.9, scale: 1, facing: -Math.PI / 2.4, awakeSeconds: 4, p
 
 // Décor ajouté, placé par rapport à la chaise de chaque pièce (en mètres) :
 // `ahead` vers l'écran, `aside` sur le côté du personnage
-const MUG = { ahead: 0.42, aside: 0.32 }
+const WATER = { ahead: 0.42, aside: 0.32 } // au boulot, de l'eau…
+const BANANA = { ahead: 0.62, aside: -0.45 } // …et une banane
 const SWITCH = { ahead: 0.5, aside: 0.8 }
 const BACKPACK = { ahead: -0.05, aside: 0.5 }
 const GARLAND = { above: 0.12, overhang: 0.15, sag: 0.12 } // au-dessus de la fenêtre de la chambre
@@ -458,6 +465,34 @@ function replaceMesh(room, mesh, m, toward, build) {
   return object
 }
 
+// Le tapis devient un tapis persan : ses sommets reçoivent une projection vue de dessus, dans le sens de sa longueur.
+// La tranche du tapis et le petit objet rangé dans le même maillage, plus haut, prennent la couleur du fond.
+function dressRug(mesh) {
+  const pos = mesh.geometry.attributes.position
+  // L'axe de l'objet qui pointe vers le haut dans la pièce, et les deux axes à plat
+  const axes = [0, 1, 2].map((k) => new Vector3().setComponent(k, 1).transformDirection(mesh.matrixWorld))
+  const up = [0, 1, 2].reduce((p, q) => (Math.abs(axes[p].y) > Math.abs(axes[q].y) ? p : q))
+  const sign = Math.sign(axes[up].y) || 1
+  const height = (i) => sign * pos.getComponent(i, up)
+  let floor = Infinity
+  for (let i = 0; i < pos.count; i++) floor = Math.min(floor, height(i))
+  const box = new Box3(), v = new Vector3()
+  for (let i = 0; i < pos.count; i++) if (height(i) - floor < RUG.flat) box.expandByPoint(v.fromBufferAttribute(pos, i))
+  const size = box.getSize(new Vector3())
+  const top = sign > 0 ? box.max.getComponent(up) : -box.min.getComponent(up)
+  const [p, q] = [0, 1, 2].filter((k) => k !== up)
+  const long = size.getComponent(p) > size.getComponent(q) ? p : q, short = long === p ? q : p
+  const uv = new Float32Array(pos.count * 2)
+  for (let i = 0; i < pos.count; i++) {
+    const onRug = height(i) > floor + (top - floor) * 0.6 && height(i) - floor < RUG.flat // le dessus, pas la tranche
+    uv[i * 2] = onRug ? (pos.getComponent(i, short) - box.min.getComponent(short)) / size.getComponent(short) : 0.005
+    uv[i * 2 + 1] = onRug ? (pos.getComponent(i, long) - box.min.getComponent(long)) / size.getComponent(long) : 0.5
+  }
+  mesh.geometry.setAttribute("uv", new BufferAttribute(uv, 2))
+  // Double face, comme le matériau d'origine : le dessus du tapis est tourné vers le bas dans le modèle
+  mesh.material = new MeshStandardMaterial({ map: persianRugTexture(size.getComponent(long) / size.getComponent(short)), roughness: 0.95, side: DoubleSide })
+}
+
 // Colle une tranche illustrée sur la face d'un livre tournée vers la pièce
 function dressBook(mesh, book, roomCenter) {
   mesh.geometry.computeBoundingBox()
@@ -652,7 +687,7 @@ export default function Apartment({ reducedMotion = false, day }) {
       if (shade && stand && measures[0]) {
         const spot = new Box3().setFromObject(stand).getCenter(new Vector3())
         const lamp = makeMushroomLamp()
-        lamp.root.scale.setScalar(measures[0].scale)
+        lamp.root.scale.setScalar(measures[0].scale * SIZES.lamp)
         lamp.root.position.set(spot.x, new Box3().setFromObject(stand).min.y, spot.z)
         lamp.root.updateMatrixWorld(true)
         chambre.attach(lamp.root)
@@ -709,7 +744,7 @@ export default function Apartment({ reducedMotion = false, day }) {
       lego.root.updateMatrixWorld(true)
       chambre.attach(lego.root)
 
-      // Décor ajouté : guirlande au-dessus de la fenêtre de la chambre, horloge en classe, sac, mug, switch
+      // Décor ajouté : guirlande au-dessus de la fenêtre de la chambre, horloge en classe, sac, eau et banane, switch
       const decor = []
       const windowMesh = findMesh(chambre, WINDOW)
       if (windowMesh) {
@@ -761,6 +796,8 @@ export default function Apartment({ reducedMotion = false, day }) {
         classe.attach(formulas)
         inspectable(formulas, "Le tableau", w.normal)
       }
+      const rug = findMesh(chambre, RUG)
+      if (rug) dressRug(rug)
       // Les livres de l'étagère de la chambre
       const books = [], spines = new Vector3()
       SHELF_BOOKS.forEach((spec, k) => {
@@ -783,7 +820,7 @@ export default function Apartment({ reducedMotion = false, day }) {
             mesh.visible = false
           }
           const vita = makePSVita()
-          vita.root.scale.setScalar(sc)
+          vita.root.scale.setScalar(sc * SIZES.vita)
           vita.root.position.copy(box.getCenter(new Vector3())).setY(box.min.y)
           vita.root.lookAt(vita.root.position.clone().add(shelfFacing))
           vita.root.rotateY(0.35)
@@ -802,8 +839,8 @@ export default function Apartment({ reducedMotion = false, day }) {
           const box = new Box3().setFromObject(lower)
           const along = new Vector3().crossVectors(WORLD_UP, shelfFacing)
           const top = box.getCenter(new Vector3()).setY(box.max.y)
-          const put = (object, offset) => {
-            object.root.scale.setScalar(sc)
+          const put = (object, offset, size) => {
+            object.root.scale.setScalar(sc * size)
             object.root.position.copy(top).addScaledVector(along, offset * sc)
             object.root.lookAt(object.root.position.clone().add(shelfFacing))
             object.root.updateMatrixWorld(true)
@@ -811,9 +848,12 @@ export default function Apartment({ reducedMotion = false, day }) {
             decor.push(object)
           }
           const plant = makeTrailingPlant()
-          put(plant, LOWER_SHELF.plant)
+          put(plant, LOWER_SHELF.plant, SIZES.plant)
+          const mangas = makeMangas()
+          put(mangas, LOWER_SHELF.mangas, SIZES.mangas)
+          inspectable(mangas.root, "Mes mangas", shelfFacing.clone().add(new Vector3(0, 0.25, 0)), { margin: 1 })
           const dvds = makeDVDs()
-          put(dvds, LOWER_SHELF.dvds)
+          put(dvds, LOWER_SHELF.dvds, SIZES.dvds)
           inspectable(dvds.root, "Mes films", shelfFacing.clone().add(new Vector3(0, 0.25, 0)), { margin: 1 })
         }
       }
@@ -856,12 +896,16 @@ export default function Apartment({ reducedMotion = false, day }) {
         inspectable(backpack.root, "Le sac", mix([m1.facing, -0.8], [WORLD_UP, 0.5]))
       }
       if (m2) {
-        const mug = makeMug()
-        place(bureau, m2, mug.root, MUG, m2.deskTop)
+        const water = makeWaterBottle()
+        place(bureau, m2, water.root, WATER, m2.deskTop)
+        const banana = makeBanana()
+        place(bureau, m2, banana.root, BANANA, m2.deskTop)
+        banana.root.rotateY(0.6)
         const netSwitch = makeSwitch()
         place(bureau, m2, netSwitch.root, SWITCH, m2.deskTop)
-        decor.push(mug, netSwitch)
-        inspectable(mug.root, "Le mug", mix([m2.facing, -0.8], [WORLD_UP, 0.4]))
+        decor.push(water, banana, netSwitch)
+        inspectable(water.root, "Ma bouteille d'eau", mix([m2.facing, -0.8], [WORLD_UP, 0.4]))
+        inspectable(banana.root, "Ma banane", mix([m2.facing, -0.6], [WORLD_UP, 0.8]))
         inspectable(netSwitch.root, "Le switch", mix([m2.facing, -0.7], [WORLD_UP, 0.7]))
       }
       // Les écrans : on cache le personnage, assis devant

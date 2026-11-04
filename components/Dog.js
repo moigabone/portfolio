@@ -1,9 +1,9 @@
 import { CapsuleGeometry, ConeGeometry, CylinderGeometry, Group, Mesh, MeshStandardMaterial, SphereGeometry, TorusGeometry } from "three"
 
-// Lego, mon Jack Russell : tout blanc, une seule tache feu autour de l'œil gauche, collier rouge et sa médaille.
+// Lego, mon Jack Russell : tout blanc, une seule tache feu autour de l'œil gauche.
 // Il est couché dans son panier, les pattes avant allongées. En mètres, l'origine au sol au centre du panier, la tête vers +x.
 
-const COLORS = { white: "#f7f4ec", tan: "#c17a3a", dark: "#1a1412", pink: "#d98a8a", collar: "#c0392b", gold: "#ffd36a", basket: "#8a5a2b", cushion: "#2e3a7a" }
+const COLORS = { white: "#f7f4ec", tan: "#c17a3a", dark: "#1a1412", pink: "#d98a8a", basket: "#8a5a2b", cushion: "#2e3a7a" }
 
 function ball(material, [x, y, z], [sx, sy, sz], r = 1) {
   const mesh = new Mesh(new SphereGeometry(r, 18, 14), material)
@@ -21,7 +21,7 @@ function capsule(material, radius, length, [x, y, z]) {
 }
 
 export function makeDog() {
-  const m = Object.fromEntries(Object.entries(COLORS).map(([k, color]) => [k, new MeshStandardMaterial({ color, roughness: k === "gold" ? 0.3 : 0.85, metalness: k === "gold" ? 0.8 : 0 })]))
+  const m = Object.fromEntries(Object.entries(COLORS).map(([k, color]) => [k, new MeshStandardMaterial({ color, roughness: 0.85 })]))
   const root = new Group()
 
   // Le panier en osier et son coussin
@@ -74,12 +74,6 @@ export function makeDog() {
   }
   const tongue = ball(m.pink, [0.062, -0.04, 0], [0.012, 0.004, 0.01])
   head.add(tongue)
-  // Collier rouge et sa médaille dorée, autour du cou
-  const collar = new Mesh(new TorusGeometry(0.042, 0.008, 6, 18), m.collar)
-  collar.position.set(-0.035, -0.035, 0)
-  collar.rotation.set(0, Math.PI / 2, 0.5)
-  head.add(collar)
-  head.add(ball(m.gold, [-0.01, -0.075, 0], [0.01, 0.01, 0.004]))
 
   // Queue courte et droite, qui remue
   const tail = new Group()
