@@ -162,8 +162,15 @@ function firewall(g, x, t) {
 }
 
 // Mes sites, en diaporama qui défile doucement
+// Mes sites, en captures (public/screens/) : l'écran de la chambre les fait défiler, un clic ouvre celui qui est affiché
+export const SITES = [
+  { image: "codex", url: "https://codex.gabin-clavier.fr" },
+  { image: "veille", url: "https://veille.gabin-clavier.fr" },
+  { image: "carte", url: "https://links.gabin-clavier.fr" },
+]
+
 function sites(images) {
-  return (g, x, t) => {
+  const paint = (g, x, t) => {
     const loaded = images.filter((img) => img.complete && img.naturalWidth)
     g.fillStyle = "#06051a"
     g.fillRect(x, 0, W, H)
@@ -178,7 +185,10 @@ function sites(images) {
     draw(loaded[(k + loaded.length - 1) % loaded.length], 1)
     draw(loaded[k], fade)
     g.globalAlpha = 1
+    paint.showing = SITES[images.indexOf(loaded[k])]
   }
+  paint.showing = null // le site affiché, une fois les captures chargées
+  return paint
 }
 
 const CODE = [
@@ -303,7 +313,7 @@ export function installScreens(room, roomCenter, contents, material) {
     texture.anisotropy = 4
     mesh.material = new MeshBasicMaterial({ map: texture, toneMapped: false })
     const painters = contents[i] ?? contents[contents.length - 1]
-    return { canvas, texture, material: mesh.material, panels, painters, last: -1 }
+    return { mesh, canvas, texture, material: mesh.material, panels, painters, last: -1 }
   })
 }
 

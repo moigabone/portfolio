@@ -60,7 +60,7 @@ export function makeDog() {
   head.add(ball(m.white, [0, 0, 0], [0.055, 0.05, 0.05])) // crâne
   head.add(ball(m.white, [0.052, -0.016, 0], [0.042, 0.026, 0.03])) // museau
   head.add(ball(m.dark, [0.093, -0.01, 0], [0.011, 0.009, 0.012])) // truffe
-  head.add(ball(m.tan, [0.024, 0.016, 0.026], [0.03, 0.026, 0.024])) // la tache
+  head.add(ball(m.tan, [0.02, 0.02, 0.028], [0.026, 0.024, 0.02])) // la tache, autour de l'œil (qui dépasse devant)
   const eyes = []
   for (const side of [-1, 1]) {
     // Oreilles blanches repliées vers l'avant
@@ -68,7 +68,7 @@ export function makeDog() {
     ear.position.set(0.006, 0.04, side * 0.04)
     ear.rotation.set(side * 0.9, 0, -2.4)
     head.add(ear)
-    const eye = ball(m.dark, [0.042, 0.016, side * 0.03], [0.008, 0.008, 0.008])
+    const eye = ball(m.dark, [0.044, 0.016, side * 0.036], [0.008, 0.008, 0.008])
     head.add(eye)
     eyes.push(eye)
   }
@@ -89,12 +89,17 @@ export function makeDog() {
   return { root, dog, body, head, eyes, tail, tongue }
 }
 
-// Endormi, la tête posée sur les pattes ; `awake` (0 à 1) relève la tête, ouvre les yeux, sort la langue et fait remuer la queue
-export function animateDog(lego, time, awake) {
+// Endormi, la tête posée sur les pattes ; `awake` (0 à 1) relève la tête, ouvre les yeux, sort la langue et fait remuer la queue.
+// `look` (ou null) : quand on le survole, il regarde le visiteur ; `yaw` et `pitch` en radians, `amount` de 0 à 1.
+// Il penche alors la tête sur le côté, comme un chien curieux.
+export function animateDog(lego, time, awake, look = null) {
   lego.body.scale.y = 1 + Math.sin(time * 1.6) * 0.04 * (1 - awake)
   lego.head.position.set(0.16 + (1 - awake) * 0.04, 0.075 + awake * 0.085, 0)
-  lego.head.rotation.z = (1 - awake) * -0.15 + awake * 0.15
-  lego.head.rotation.y = awake * Math.sin(time * 0.9) * 0.35
+  const seen = look?.amount ?? 0
+  const wander = awake * Math.sin(time * 0.9) * 0.35
+  lego.head.rotation.z = (1 - awake) * -0.15 + awake * 0.15 + seen * (look?.pitch ?? 0)
+  lego.head.rotation.y = wander + seen * ((look?.yaw ?? 0) - wander)
+  lego.head.rotation.x = seen * (0.35 + Math.sin(time * 1.3) * 0.08)
   for (const eye of lego.eyes) eye.scale.y = 0.0015 + awake * 0.0065
   lego.tongue.visible = awake > 0.5
   lego.tail.rotation.z = -1.1 + awake * 0.7

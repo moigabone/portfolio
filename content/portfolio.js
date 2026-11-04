@@ -139,3 +139,34 @@ export const site = {
   title: `${profile.name} — Portfolio`,
   description: `${profile.role}. Un portfolio en 3D : chaque étage raconte une partie de mon parcours.`,
 }
+
+// Les petits textes de l'interface et de la scène 3D
+export const ui = {
+  lang: "fr",
+  scene: "Mon portfolio est un immeuble en 3D de trois étages : ma chambre (projets perso), une salle de classe (formation) et un bureau (alternance). Le texte de chaque étage s'affiche en faisant défiler la page. Au clavier, les touches 0, 1, 2 et C mènent aux étages, H à l'accueil.",
+  hint: "Astuce : clique sur moi et sur les objets des pièces.",
+  nextProjects: "Prochains projets",
+  likes: "Ce que j'aime",
+  skills: "Compétences",
+  certifications: "Certification et langues",
+  floors: { C: "Contact", 2: "2e étage · Le bureau", 1: "1er étage · La salle de classe", 0: "Rez-de-chaussée · La chambre", home: "Accueil" },
+  floorsLabel: "Étages",
+  toNight: "Passer en mode nuit",
+  toDay: "Passer en mode jour",
+  soundOn: "Activer l'ambiance sonore",
+  soundOff: "Couper le son",
+  language: "View the site in English",
+  found: (count, total) => `${count} objets découverts sur ${total} : clique sur ce qui t'intrigue`,
+  allFound: "Tu as tout trouvé, bravo !",
+  inspectHint: "Clic ou Échap pour revenir",
+  openHint: "Clic pour ouvrir le site · Échap pour revenir",
+  // Ce qui s'affiche au survol des objets et dans les bulles
+  labels: { banner: "Mes sites ↗", ecritel: "Mon alternance ↓", dog: "Lego" },
+  phrases: {
+    chambre: "Le soir, je code mes propres projets : ce portfolio, le Codex, la Veille…",
+    classe: "4e année à l'ESIEA, majeure cybersécurité. Diplôme en 2028 !",
+    bureau: "Chez Ecritel, je construis des clusters de firewalls pour les clients.",
+  },
+  dog: "Wouf ! Moi, c'est Lego.",
+  objects: {}, // les noms des objets sont déjà en français dans la scène
+}

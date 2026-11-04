@@ -1647,3 +1647,26 @@ export function makeServerRoom(width, height, scale, walls) {
     },
   }
 }
+
+// --- Un pain de savon rose, posé à côté de la PS Vita ---
+
+export function makeSoap() {
+  const root = new Group()
+  const pink = new MeshStandardMaterial({ color: "#f29bb8", roughness: 0.35 })
+  // Un pavé aux bords arrondis : une boîte plate entre deux demi-cylindres
+  const body = new Mesh(new BoxGeometry(0.06, 0.028, 0.05), pink)
+  body.position.y = 0.014
+  root.add(body)
+  for (const side of [-1, 1]) {
+    const end = new Mesh(new CylinderGeometry(0.025, 0.025, 0.028, 16, 1, false, side < 0 ? Math.PI : 0, Math.PI), pink)
+    end.position.set(side * 0.03, 0.014, 0)
+    root.add(end)
+  }
+  // Un creux au milieu du dessus, comme un savon déjà servi
+  const dip = new Mesh(new CylinderGeometry(0.018, 0.018, 0.002, 16), new MeshStandardMaterial({ color: "#e486a6", roughness: 0.4 }))
+  dip.scale.x = 1.6
+  dip.position.y = 0.0285
+  root.add(dip)
+  root.traverse((child) => child.isMesh && (child.castShadow = true))
+  return { root, animate() {} }
+}

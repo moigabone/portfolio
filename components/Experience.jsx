@@ -1,5 +1,6 @@
 "use client"
 import { Suspense, useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { Canvas, useFrame, useThree } from "@react-three/fiber"
 import { Environment, Lightformer, ScrollControls, Stars } from "@react-three/drei"
 import { Color, MathUtils, NeutralToneMapping, Vector3 } from "three"
@@ -9,7 +10,8 @@ import Overlay from "./Overlay"
 import Loader from "./Loader"
 import Elevator, { ScrollBridge } from "./Elevator"
 import StaticPortfolio from "./StaticPortfolio"
-import { SoundToggle, ThemeToggle } from "./Controls"
+import { Discoveries, LanguageToggle, SceneDescription, SoundToggle, ThemeToggle } from "./Controls"
+import { initLang } from "@/content/i18n"
 import { NB_SECTIONS } from "./Sections"
 import { DAYLIGHT_SPEED, parisIsDay, saveTheme, savedTheme } from "./theme"
 
@@ -81,15 +83,48 @@ function Lights({ day, reducedMotion }) {
 // L'interrupteur jour / nuit garde son état pour lui : si Experience refaisait son rendu,
 // le Canvas se reconfigurerait et ScrollControls perdrait le défilement.
 // La scène lit le thème dans `dayRef` à chaque image, le CSS dans data-theme.
+// Le changement jour / nuit : le ciel se retourne comme un volet, lame après lame, de gauche à droite,
+// et le soleil (ou la lune) passe sur la ligne de partage. Derrière la scène 3D, qui reste visible.
+const SHUTTER = { slats: 12, stagger: 60, flip: 600 } // millisecondes
+function SkyShutter({ toDay, onDone }) {
+  useEffect(() => {
+    const timer = setTimeout(onDone, SHUTTER.slats * SHUTTER.stagger + SHUTTER.flip + 150)
+    return () => clearTimeout(timer)
+  }, [onDone])
+  const face = (isDay, k) => ({
+    backgroundImage: isDay ? "var(--sky-day)" : "var(--sky-night)",
+    backgroundPosition: `calc(${-k} * 100vw / ${SHUTTER.slats}) 0`,
+  })
+  return createPortal(
+    <div className="shutter" aria-hidden="true">
+      {Array.from({ length: SHUTTER.slats }, (_, k) => (
+        <div key={k} className="shutter-slat" style={{ animationDelay: `${k * SHUTTER.stagger}ms`, animationDuration: `${SHUTTER.flip}ms` }}>
+          <div className="shutter-face" style={face(!toDay, k)} />
+          <div className="shutter-face shutter-back" style={face(toDay, k)} />
+        </div>
+      ))}
+      <div className={`shutter-orb ${toDay ? "shutter-sun" : "shutter-moon"}`} style={{ animationDuration: `${SHUTTER.slats * SHUTTER.stagger + SHUTTER.flip}ms` }} />
+    </div>,
+    document.body,
+  )
+}
+
 function ThemeSwitch({ dayRef }) {
   const [day, setDay] = useState(dayRef.current)
+  const [shutter, setShutter] = useState(null)
   const choose = (isDay) => {
+    if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) setShutter({ toDay: isDay, at: Date.now() })
     setDay(isDay)
     dayRef.current = isDay
     document.documentElement.dataset.theme = isDay ? "day" : "night"
     saveTheme(isDay ? "day" : "night")
   }
-  return <ThemeToggle day={day} onChange={choose} />
+  return (
+    <>
+      <ThemeToggle day={day} onChange={choose} />
+      {shutter && <SkyShutter key={shutter.at} toDay={shutter.toDay} onDone={() => setShutter(null)} />}
+    </>
+  )
 }
 
 export default function Experience() {
@@ -104,6 +139,7 @@ export default function Experience() {
     const saved = savedTheme()
     dayRef.current = saved ? saved === "day" : parisIsDay()
     document.documentElement.dataset.theme = dayRef.current ? "day" : "night"
+    initLang()
     setWebgl(hasWebGL())
     setReducedMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches)
   }, [])
@@ -113,6 +149,7 @@ export default function Experience() {
   return (
     <div className="h-dvh w-screen">
       <div className="sky-day" aria-hidden="true" />
+      <SceneDescription />
       {webgl && (
         <Canvas
           shadows
@@ -133,8 +170,10 @@ export default function Experience() {
       )}
       {webgl && <Elevator scroll={scroll} />}
       <div className="fixed right-4 top-4 z-40 flex items-center gap-2">
+        {webgl && <Discoveries />}
         <SoundToggle />
         {webgl !== null && <ThemeSwitch dayRef={dayRef} />}
+        {webgl !== null && <LanguageToggle />}
       </div>
       <Loader />
     </div>

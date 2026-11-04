@@ -1,8 +1,9 @@
 "use client"
 import { useEffect, useRef, useState } from "react"
 import { createAmbient } from "./ambient"
+import { setLang, useContent } from "@/content/i18n"
 
-// En haut à droite : l'interrupteur soleil / lune et le bouton du son
+// En haut à droite : le compteur de découvertes, le son, l'interrupteur soleil / lune et celui de la langue
 
 function Sun() {
   return (
@@ -24,13 +25,14 @@ function Moon() {
 }
 
 export function ThemeToggle({ day, onChange }) {
+  const { ui } = useContent()
   return (
     <button
       type="button"
       role="switch"
       aria-checked={day}
-      aria-label={day ? "Passer en mode nuit" : "Passer en mode jour"}
-      title={day ? "Passer en mode nuit" : "Passer en mode jour"}
+      aria-label={day ? ui.toNight : ui.toDay}
+      title={day ? ui.toNight : ui.toDay}
       onClick={() => onChange(!day)}
       className={`relative h-9 w-[4.5rem] overflow-hidden rounded-full border transition-colors duration-700 ${
         day ? "border-[#9cc9ef] bg-gradient-to-b from-[#7cc3ff] to-[#cfe9ff]" : "border-seam bg-gradient-to-b from-[#0d0b35] to-[#1c1960]"
@@ -62,6 +64,7 @@ export function ThemeToggle({ day, onChange }) {
 export function SoundToggle() {
   const [on, setOn] = useState(false)
   const ambient = useRef(null)
+  const { ui } = useContent()
   useEffect(() => () => ambient.current?.stop(), [])
 
   const toggle = () => {
@@ -74,8 +77,8 @@ export function SoundToggle() {
     <button
       type="button"
       aria-pressed={on}
-      aria-label={on ? "Couper le son" : "Activer l'ambiance sonore"}
-      title={on ? "Couper le son" : "Activer l'ambiance sonore"}
+      aria-label={on ? ui.soundOff : ui.soundOn}
+      title={on ? ui.soundOff : ui.soundOn}
       onClick={toggle}
       className="grid h-9 w-9 place-items-center rounded-full border border-seam bg-panel text-ash backdrop-blur transition hover:border-gilt hover:text-gilt"
     >
@@ -85,4 +88,108 @@ export function SoundToggle() {
       </svg>
     </button>
   )
+}
+
+// Le compteur d'objets découverts : la scène annonce ce qui est cliquable, puis chaque clic.
+// Les trouvailles sont gardées dans ce navigateur, pour reprendre la chasse à la visite suivante.
+const FOUND_KEY = "portfolio:found"
+
+function loadFound() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(FOUND_KEY) ?? "[]"))
+  } catch {
+    return new Set()
+  }
+}
+
+export function Discoveries() {
+  const [keys, setKeys] = useState([])
+  const [found, setFound] = useState(() => new Set())
+  const [fresh, setFresh] = useState(false) // un petit éclat à chaque nouvelle trouvaille
+  const { ui } = useContent()
+
+  useEffect(() => {
+    setFound(loadFound())
+    const onList = (e) => setKeys(e.detail)
+    const onFind = (e) =>
+      setFound((current) => {
+        if (current.has(e.detail)) return current
+        const next = new Set(current).add(e.detail)
+        try {
+          localStorage.setItem(FOUND_KEY, JSON.stringify([...next]))
+        } catch {}
+        setFresh(true)
+        return next
+      })
+    window.addEventListener("portfolio:discoverable", onList)
+    window.addEventListener("portfolio:discover", onFind)
+    return () => {
+      window.removeEventListener("portfolio:discoverable", onList)
+      window.removeEventListener("portfolio:discover", onFind)
+    }
+  }, [])
+  useEffect(() => {
+    if (!fresh) return
+    const timer = setTimeout(() => setFresh(false), 900)
+    return () => clearTimeout(timer)
+  }, [fresh])
+
+  if (!keys.length) return null
+  const count = keys.filter((k) => found.has(k)).length
+  const done = count === keys.length
+  const text = done ? ui.allFound : ui.found(count, keys.length)
+  return (
+    <div
+      role="status"
+      aria-label={text}
+      title={text}
+      className={`flex h-9 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold tabular-nums backdrop-blur transition ${
+        done ? "border-gilt bg-panel text-gilt shadow-[0_0_14px_rgb(255_211_106/0.5)]" : "border-seam bg-panel text-ash"
+      } ${fresh ? "scale-110 border-gilt text-gilt" : ""}`}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+        <circle cx="11" cy="11" r="6" />
+        <path d="m20 20-4.5-4.5" />
+      </svg>
+      <span>
+        {count} / {keys.length}
+      </span>
+    </div>
+  )
+}
+
+// FR / EN, dans le style de l'interrupteur jour / nuit : le curseur glisse vers la langue choisie
+export function LanguageToggle() {
+  const { ui } = useContent()
+  const english = ui.lang === "en"
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={english}
+      aria-label={ui.language}
+      title={ui.language}
+      onClick={() => setLang(english ? "fr" : "en")}
+      className="relative h-9 w-[4.5rem] overflow-hidden rounded-full border border-seam bg-gradient-to-b from-[#0d0b35] to-[#1c1960] text-[0.7rem] font-semibold"
+    >
+      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-mist" aria-hidden="true">
+        FR
+      </span>
+      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-mist" aria-hidden="true">
+        EN
+      </span>
+      <span
+        className={`absolute top-1 grid h-7 w-7 place-items-center rounded-full bg-gilt text-night shadow-md transition-all duration-500 ease-in-out ${english ? "left-[calc(100%-2rem)]" : "left-1"}`}
+        aria-hidden="true"
+      >
+        {english ? "EN" : "FR"}
+      </span>
+    </button>
+  )
+}
+
+// Pour les lecteurs d'écran : ce que montre la scène 3D, et comment s'y déplacer
+export function SceneDescription() {
+  const { ui } = useContent()
+  return <p className="sr-only">{ui.scene}</p>
 }

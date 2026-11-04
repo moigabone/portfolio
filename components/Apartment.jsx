@@ -27,6 +27,8 @@ import {
 import { SECTIONS, NB_SECTIONS } from "./Sections"
 import { animatePerson, makePerson, setOpacity } from "./Person"
 import { animateDog, makeDog } from "./Dog"
+import { sound } from "./ambient"
+import { useContent } from "@/content/i18n"
 import {
   BOOKS,
   bookTexture,
@@ -47,12 +49,13 @@ import {
   makeNotebook,
   makeSchoolPC,
   makeServerRoom,
+  makeSoap,
   makeStarBall,
   makeSwitch,
   makeWaterBottle,
   persianRugTexture,
 } from "./Decor"
-import { drawScreens, installScreens, screenContents } from "./Screens"
+import { SITES, drawScreens, installScreens, screenContents } from "./Screens"
 import { scrollToSection } from "./Elevator"
 import { DAYLIGHT_SPEED } from "./theme"
 
@@ -94,6 +97,7 @@ const RUG = { material: "Matériau.021", vertices: 1793, flat: 0.1 } // le tapis
 const SHELF = { material: "Matériau.023", vertices: 458 } // l'étagère de la chambre, dupliquée plus bas
 const LOWER_SHELF = { drop: 0.55, plant: -0.34, mangas: -0.17, dvds: 0.12 } // en mètres : sous la première ; la plante à gauche, puis les mangas et les DVD
 // Agrandis pour aller avec le reste du modèle (les livres de l'étagère font 37 cm)
+const SOAP = { aside: -0.17, ahead: 0.05, size: 0.8 } // dans le repère de la PS Vita (en mètres avant son agrandissement)
 const SIZES = { dvds: 1.6, mangas: 1.6, plant: 1.6, lamp: 1.4, vita: 1.8 }
 const PLANTS = { material: "Matériau.022", vertices: 560 } // les feuilles se balancent
 const GLOBE = { material: "Matériau.008", vertices: 582 } // tourne, plus vite au survol
@@ -113,7 +117,7 @@ const KEYBOARDS = {
 const FOREARM = 0.31 // en mètres, du coude au creux de la main
 
 // Lego, mon chien : son panier est avancé vers le visiteur depuis le centre de la chambre, la tête vers lui
-const DOG = { forward: 0.9, scale: 1, facing: -Math.PI / 2.4, awakeSeconds: 4, phrase: "Wouf ! Moi, c'est Lego." }
+const DOG = { forward: 0.9, scale: 1, facing: -Math.PI / 2.4, awakeSeconds: 4 }
 
 // Décor ajouté, placé par rapport à la chaise de chaque pièce (en mètres) :
 // `ahead` vers l'écran, `aside` sur le côté du personnage
@@ -149,20 +153,13 @@ const CLASS_WINDOW = { material: "Matériau.017", vertices: 1452 } // la fenêtr
 const CLOCK = { gap: 0.24, raise: 0.25, off: 0.012 } // en mètres : écart avec la fenêtre, hauteur au-dessus de son centre, décollement du mur
 
 // Au survol, ces objets s'illuminent et une étiquette dit où ils mènent
-const LABELS = { banner: "Mes sites ↗", ecritel: "Mon alternance ↓", dog: "Lego" }
 
 // Examiner un objet : un clic rapproche la caméra pour lire ce qui est écrit dessus ;
 // un autre clic, Échap ou le scroll la ramènent. `margin` : distance en rayons de l'objet ;
 // `blend` : part de l'axe habituel de la caméra mêlée à la direction propre à l'objet
 const INSPECT = { margin: 1.25, speed: 3, blend: 0.2 }
-const INSPECT_HINT = "Clic ou Échap pour revenir"
 
 // Interactions : ce que dit le personnage quand on clique sur lui, selon la pièce
-const PHRASES = {
-  chambre: "Le soir, je code mes propres projets : ce portfolio, le Codex, la Veille…",
-  classe: "4e année à l'ESIEA, majeure cybersécurité. Diplôme en 2028 !",
-  bureau: "Chez Ecritel, je construis des clusters de firewalls pour les clients.",
-}
 const BUBBLE_SECONDS = 4
 const WAVE_SECONDS = 3
 const PICK_DEPTH = 4 // objets les plus proches examinés sous la souris
@@ -385,6 +382,10 @@ function seatPerson(room, m, bonus = 1) {
 }
 
 // Repère d'un objet plat accroché au mur (tableau, fenêtre) : son centre, la normale vers la pièce, sa largeur et sa hauteur
+// Le nom sous lequel un objet cliquable compte dans les découvertes ; le compteur l'apprend par un évènement
+const discoveryKey = (action) => (action.type === "person" ? `person-${action.room}` : (action.label ?? action.type))
+const announce = (name, detail) => window.dispatchEvent(new CustomEvent(`portfolio:${name}`, { detail }))
+
 function wallFrame(mesh, roomCenter) {
   mesh.geometry.computeBoundingBox()
   const box = mesh.geometry.boundingBox
@@ -624,6 +625,7 @@ export default function Apartment({ reducedMotion = false, day }) {
     globeSpin: 0,
     glow: { banner: 0, ecritel: 0 },
     bannerPhase: 0,
+    dogLook: 0, // 0 à 1 : Lego tourne la tête vers le visiteur
     vaultOpen: 0, // 0 : portes dépolies, 1 : on voit les baies
     box: new Box3(),
     inspect: null, // l'objet examiné
@@ -634,6 +636,7 @@ export default function Apartment({ reducedMotion = false, day }) {
     eye: new Vector3(),
   })
   const [label, setLabel] = useState(null)
+  const { ui } = useContent() // les textes de la scène, dans la langue choisie
   const [inspecting, setInspecting] = useState(false)
   const hintAnchor = useRef()
   const labelAnchor = useRef()
@@ -681,7 +684,7 @@ export default function Apartment({ reducedMotion = false, day }) {
       })
 
       // Écrans vivants
-      const images = ["codex", "veille", "carte"].map((name) => Object.assign(new Image(), { src: `/screens/${name}.jpg` }))
+      const images = SITES.map(({ image }) => Object.assign(new Image(), { src: `/screens/${image}.jpg` }))
       const contents = screenContents(images)
       const screens = rooms.flatMap((r) => installScreens(r.object, r.sphere.center, contents[r.name], SCREEN_MATERIAL))
 
@@ -717,7 +720,8 @@ export default function Apartment({ reducedMotion = false, day }) {
           if (room === chambre) relic.root.position.y += radius * 0.25 // posé sur sa pointe, il flotte juste au-dessus de l'étagère
           relic.root.updateMatrixWorld(true)
           room.attach(relic.root)
-          relic.spinner.traverse((c) => (c.userData.action = { type: "globe" }))
+          const action = { type: "globe", label: room === chambre ? "Le cube" : "La boule de cristal", object: relic.root }
+          relic.spinner.traverse((c) => (c.userData.action = action))
           relics.push(relic)
           m.visible = false
           return relic.spinner
@@ -834,6 +838,12 @@ export default function Apartment({ reducedMotion = false, day }) {
           vita.root.updateMatrixWorld(true)
           chambre.attach(vita.root)
           inspectable(vita.root, "Ma PS Vita", shelfFacing.clone().add(new Vector3(0, 1.6, 0)), { margin: 1.1 })
+          // Un pain de savon rose à sa droite (vu de la pièce), posé dans le repère de la console
+          const soap = makeSoap()
+          soap.root.position.set(SOAP.aside, 0, SOAP.ahead)
+          soap.root.rotation.y = -0.5
+          soap.root.scale.setScalar(SOAP.size)
+          vita.root.add(soap.root)
         }
         // Une deuxième étagère sous la première : une plante tombante et mes films
         const shelf = findMesh(chambre, SHELF)
@@ -931,8 +941,12 @@ export default function Apartment({ reducedMotion = false, day }) {
       rooms.forEach((r, k) => {
         if (!measures[k]) return
         r.object.traverse((c) => {
-          if (c.isMesh && c.material.map && c.material.isMeshBasicMaterial && !c.userData.action) {
+          // (pas ceux qui font partie d'un objet déjà cliquable, comme l'écran de la PS Vita)
+          if (c.isMesh && c.material.map && c.material.isMeshBasicMaterial && !actionOf(c)) {
             inspectable(c, "Voir l'écran", mix([measures[k].facing, -1], [WORLD_UP, 0.15]), { hide: k, margin: 0.85, blend: 0.1 })
+            // L'écran qui fait défiler mes sites : une fois zoomé, un clic ouvre celui qui est affiché
+            const showcase = screens.find((screen) => screen.mesh === c)?.painters.find((paint) => "showing" in paint)
+            if (showcase) c.userData.action.link = () => showcase.showing?.url
           }
         })
       })
@@ -981,7 +995,8 @@ export default function Apartment({ reducedMotion = false, day }) {
     state.current.hover = action
     document.body.style.cursor = action ? "pointer" : ""
     // L'étiquette ne change que quand on passe d'un objet à un autre (pas de rendu React à chaque mouvement)
-    const text = action && (action.label ?? LABELS[action.type])
+    // Un nom d'objet ou un type qui a une étiquette, traduit à l'affichage (ui.objects, ui.labels)
+    const text = action && (action.label ?? (action.type in ui.labels ? action.type : null))
     setLabel((current) => (current?.object === action?.object && current?.text === text ? current : text ? { text, object: action.object } : null))
   }
   const inspect = (action) => {
@@ -1010,12 +1025,21 @@ export default function Apartment({ reducedMotion = false, day }) {
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
   })
+  // Le compteur d'objets découverts : chaque objet cliquable compte une fois (voir Discoveries)
+  useEffect(() => {
+    const keys = new Set()
+    scene.traverse((o) => o.userData.action && keys.add(discoveryKey(o.userData.action)))
+    announce("discoverable", [...keys])
+  }, [scene])
   const onPointerMove = (e) => hoverOn(pick(e))
   const onPointerLeave = () => hoverOn(null)
   const onClick = (e) => {
     const action = pick(e)
     const s = state.current
     // Pendant l'examen d'un objet, un clic revient à la vue normale (ou passe à un autre objet examinable)
+    if (action) announce("discover", discoveryKey(action))
+    const url = s.inspect && action === s.inspect && action.link?.()
+    if (url) return window.open(url, "_blank", "noopener")
     if (s.inspect) return inspect(action?.type === "inspect" && action !== s.inspect ? action : null)
     if (!action) return
     const now = clock.elapsedTime
@@ -1023,11 +1047,12 @@ export default function Apartment({ reducedMotion = false, day }) {
       inspect(action)
     } else if (action.type === "person") {
       s.waves[action.room] = now
-      setBubble({ text: PHRASES[ROOMS[action.room]], target: "person", room: action.room, at: now })
+      setBubble({ target: "person", room: action.room, at: now })
     } else if (action.type === "dog") {
       s.dogWake = now
+      sound.bark()
       inspect({ type: "inspect", object: [world.lego.root], normal: null, margin: 1.1, blend: 1, hide: -1 })
-      setBubble({ text: DOG.phrase, target: "dog", at: now })
+      setBubble({ target: "dog", at: now })
     } else if (action.type === "globe") {
       s.globeSpin = 1
     } else if (action.type === "banner") {
@@ -1133,7 +1158,19 @@ export default function Apartment({ reducedMotion = false, day }) {
     // Lego se réveille quand on clique dessus, quand on le survole, ou quand le personnage de la chambre se retourne
     const turned = Math.max(s.attention[0], pulse(now - s.waves[0], WAVE_SECONDS))
     const petted = s.hover?.type === "dog" ? 0.8 : 0
-    animateDog(world.lego, time, reducedMotion ? 0 : Math.max(pulse(now - s.dogWake, DOG.awakeSeconds), turned * 0.6, petted))
+    // Survolé, il tourne la tête vers le visiteur (la tête regarde vers +x dans son repère)
+    s.dogLook = MathUtils.damp(s.dogLook, petted ? 1 : 0, 4, delta)
+    let look = null
+    if (s.dogLook > 0.01 && !reducedMotion) {
+      // La caméra vue depuis sa tête, dans son repère : il tourne la tête vers elle et la lève
+      const seen = world.lego.head.parent.worldToLocal(s.eye.copy(camera.position)).sub(world.lego.head.position)
+      look = {
+        amount: s.dogLook,
+        yaw: MathUtils.clamp(Math.atan2(-seen.z, seen.x), -0.9, 0.9),
+        pitch: MathUtils.clamp(Math.atan2(seen.y, Math.hypot(seen.x, seen.z)), 0, 0.7),
+      }
+    }
+    animateDog(world.lego, time, reducedMotion ? 0 : Math.max(pulse(now - s.dogWake, DOG.awakeSeconds), turned * 0.6, petted), look)
 
     // Bulle au-dessus du personnage ou de Lego
     if (bubble && anchor.current) {
@@ -1206,7 +1243,7 @@ export default function Apartment({ reducedMotion = false, day }) {
           {/* Dans le calque fixe de la scène, pas dans le conteneur qui défile */}
           <Html center portal={{ current: gl.domElement.parentNode }} zIndexRange={[35, 0]} style={{ pointerEvents: "none" }}>
             <div className="bubble" role="status">
-              {bubble.text}
+              {bubble.target === "dog" ? ui.dog : ui.phrases[ROOMS[bubble.room]]}
             </div>
           </Html>
         </group>
@@ -1214,14 +1251,14 @@ export default function Apartment({ reducedMotion = false, day }) {
       {inspecting && (
         <group ref={hintAnchor}>
           <Html center portal={{ current: gl.domElement.parentNode }} zIndexRange={[33, 0]} style={{ pointerEvents: "none" }}>
-            <div className="hover-label inspect-hint">{INSPECT_HINT}</div>
+            <div className="hover-label inspect-hint">{state.current.shown?.link ? ui.openHint : ui.inspectHint}</div>
           </Html>
         </group>
       )}
       {label && !inspecting && (
         <group ref={labelAnchor}>
           <Html center portal={{ current: gl.domElement.parentNode }} zIndexRange={[34, 0]} style={{ pointerEvents: "none" }}>
-            <div className="hover-label">{label.text}</div>
+            <div className="hover-label">{ui.labels[label.text] ?? ui.objects[label.text] ?? label.text}</div>
           </Html>
         </group>
       )}

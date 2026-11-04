@@ -17,21 +17,21 @@ pnpm preview    # sert out/ en local pour vérifier le build
 
 ## Modifier le contenu
 
-Tout le texte du site se trouve dans [`content/portfolio.js`](content/portfolio.js) : profil, compétences, projets, liens de contact, titre et description SEO. Ajouter un projet ou une compétence se fait uniquement dans ce fichier.
+Tout le texte du site se trouve dans [`content/portfolio.js`](content/portfolio.js) : profil, compétences, projets, liens de contact, titre et description SEO, petits textes de l'interface. La version anglaise est dans [`content/portfolio.en.js`](content/portfolio.en.js), avec la même structure : un ajout dans l'un se reporte dans l'autre. [`content/i18n.js`](content/i18n.js) garde la langue choisie (bouton FR / EN).
 
 ## Structure
 
 | Fichier | Rôle |
 | --- | --- |
 | `components/Experience.jsx` | Canvas 3D, éclairage jour / nuit, scroll, boutons ; bascule sur une version statique sans WebGL |
-| `components/DaySky.jsx` | Ciel du jour : nuages qui dérivent derrière l'immeuble, oiseaux |
+| `components/DaySky.jsx` | Ciel du jour (nuages, oiseaux) et lune la nuit |
 | `components/Apartment.jsx` | Modèle 3D, caméra qui cadre chaque pièce, mouvement des étages, décor animé, clics (réglages en haut du fichier) |
 | `components/Person.js` | Le personnage d'après mon Bitmoji et ses gestes (frappe, regard caméra, coucou) |
 | `components/Dog.js` | Lego, mon chien, dans son panier |
 | `components/Decor.js` | Décor ajouté : cube violet et boule de cristal à 4 étoiles, salle serveurs du bureau (deux baies 42U derrière des portes vitrées), guirlande, horloge à l'heure de Paris, sac, bouteille d'eau et banane, baie réseau (brassage, switch, NAS), lampe à lave, formules de Fourier, tranches des livres, PC gamer et casque RGB, PC de l'école, cahier |
 | `components/Screens.js` | Les écrans vivants : terminal, règles de firewall, mes sites (`public/screens/`), slides |
 | `components/Elevator.jsx` | Le panneau d'ascenseur pour aller d'un étage à l'autre |
-| `components/Controls.jsx`, `ambient.js`, `theme.js` | Interrupteur soleil / lune (heure de Paris par défaut) et ambiance sonore générée |
+| `components/Controls.jsx`, `ambient.js`, `theme.js` | Compteur d'objets découverts, interrupteurs soleil / lune (heure de Paris par défaut) et FR / EN, ambiance sonore générée (fond propre à chaque pièce, aboiement de Lego) |
 | `components/Overlay.jsx` | Fondu des cartes selon la position du scroll |
 | `components/Sections.jsx` | Contenu et mise en page des cartes (une section = une page de scroll) |
 | `components/Loader.jsx` | Écran de chargement du modèle |

@@ -3,6 +3,7 @@ import { useRef } from "react"
 import { Scroll, useScroll } from "@react-three/drei"
 import { useFrame } from "@react-three/fiber"
 import { SECTIONS, NB_SECTIONS, Section } from "./Sections"
+import { useContent } from "@/content/i18n"
 
 // Chaque section est pleinement visible quand le scroll est centré dessus,
 // puis s'estompe vers les sections voisines.
@@ -11,6 +12,7 @@ const FADE_SPEED = 1.4
 export default function Overlay() {
   const scroll = useScroll()
   const sections = useRef([])
+  const content = useContent()
 
   // On écrit directement dans le style (pas de setState) pour éviter un rendu React par frame.
   useFrame(() => {
@@ -29,7 +31,7 @@ export default function Overlay() {
       <div className="w-screen">
         {SECTIONS.map((s, i) => (
           <Section key={s.id} id={s.id} right={s.right} ref={(el) => (sections.current[i] = el)}>
-            {s.content}
+            {s.content(content)}
           </Section>
         ))}
       </div>

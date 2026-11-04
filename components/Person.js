@@ -191,12 +191,14 @@ export function animatePerson({ root, parts }, time, phase, camera, { attention 
 
   parts.torso.rotation.x = 0.12 + Math.sin(t * 1.4) * 0.012
   parts.torso.rotation.y = twist * glance
-  // Il fait coucou avec le bras du côté de la caméra
+  // Il fait coucou avec le bras du côté de la caméra : le bras se lève un peu devant lui, coude en bas,
+  // l'avant-bras se dresse et la main se balance de gauche à droite
   const waving = yaw >= 0 ? 1 : -1
   parts.arms.forEach(({ side, shoulder, forearm }, i) => {
     const w = side === waving ? wave : 0
-    forearm.rotation.x = parts.reach * (1 - w) + Math.max(0, Math.sin(t * 7 + i * 2.1)) * -0.07 * (1 - glance) - 1.3 * w
-    shoulder.rotation.z = side * (2.2 + Math.sin(time * 9) * 0.25) * w
+    shoulder.rotation.x = -0.6 * w
+    shoulder.rotation.z = side * (0.4 + Math.sin(time * 9) * 0.2) * w
+    forearm.rotation.x = parts.reach * (1 - w) + Math.max(0, Math.sin(t * 7 + i * 2.1)) * -0.07 * (1 - glance) - 0.9 * w
   })
   const idleYaw = Math.sin(t * 0.35) * 0.3 + Math.sin(t * 0.13) * 0.15
   const idlePitch = 0.08 + Math.sin(t * 0.27) * 0.06

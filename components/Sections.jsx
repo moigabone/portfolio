@@ -1,8 +1,7 @@
-import { profile, projects, education, work, contact } from "@/content/portfolio"
-
 // Contenu de chaque "page" du scroll, partagé entre la version 3D et la version statique.
 // `room` : pièce du modèle 3D sur laquelle la caméra zoome (null = vue d'ensemble).
 // `right` place la carte à droite (la pièce est alors cadrée à gauche).
+// `content` reçoit les textes de la langue choisie (voir content/i18n.js).
 
 const ScrollHint = () => (
   <p className="mt-6 animate-bounce text-gilt" aria-hidden="true">
@@ -62,7 +61,7 @@ export const SECTIONS = [
     id: "intro",
     room: null,
     right: false,
-    content: (
+    content: ({ profile, projects, education, work, contact, ui }) => (
       <>
         <Eyebrow>Portfolio</Eyebrow>
         <h1 className="font-serif text-5xl font-semibold leading-none text-parchment md:text-6xl">{profile.name}</h1>
@@ -76,7 +75,7 @@ export const SECTIONS = [
         >
           {profile.cv.label} ↓
         </a>
-        <p className="mt-5 text-xs text-ash">Astuce : clique sur moi et sur les objets des pièces.</p>
+        <p className="mt-5 text-xs text-ash">{ui.hint}</p>
         <ScrollHint />
       </>
     ),
@@ -85,7 +84,7 @@ export const SECTIONS = [
     id: "projets",
     room: "chambre",
     right: false,
-    content: (
+    content: ({ profile, projects, education, work, contact, ui }) => (
       <>
         <Eyebrow>{projects.eyebrow}</Eyebrow>
         <Title>{projects.title}</Title>
@@ -114,13 +113,13 @@ export const SECTIONS = [
     id: "loisirs",
     room: "chambre",
     right: true,
-    content: (
+    content: ({ profile, projects, education, work, contact, ui }) => (
       <>
         <Eyebrow>{projects.eyebrow}</Eyebrow>
         <Title>{projects.afterHours}</Title>
-        <Label>Prochains projets</Label>
+        <Label>{ui.nextProjects}</Label>
         <Tags items={projects.ideas} />
-        <Label>Ce que j'aime</Label>
+        <Label>{ui.likes}</Label>
         <ul className="mt-2 space-y-1.5 text-sm">
           {projects.hobbies.map((h) => (
             <li key={h.label}>
@@ -141,14 +140,14 @@ export const SECTIONS = [
     id: "formation",
     room: "classe",
     right: false,
-    content: (
+    content: ({ profile, projects, education, work, contact, ui }) => (
       <>
         <Eyebrow>{education.eyebrow}</Eyebrow>
         <Title>{education.title}</Title>
         <Timeline items={education.items} />
-        <Label>Compétences</Label>
+        <Label>{ui.skills}</Label>
         <Tags items={education.skills} />
-        <Label>Certification et langues</Label>
+        <Label>{ui.certifications}</Label>
         <p className="mt-1 text-sm text-ash">{education.certifications.join(", ")}</p>
         <p className="text-sm text-ash">{education.languages}</p>
       </>
@@ -158,7 +157,7 @@ export const SECTIONS = [
     id: "ecole",
     room: "classe",
     right: true,
-    content: (
+    content: ({ profile, projects, education, work, contact, ui }) => (
       <>
         <Eyebrow>{education.eyebrow}</Eyebrow>
         <Title>{education.projectsTitle}</Title>
@@ -170,7 +169,7 @@ export const SECTIONS = [
     id: "alternance",
     room: "bureau",
     right: false,
-    content: (
+    content: ({ profile, projects, education, work, contact, ui }) => (
       <>
         <Eyebrow>{work.eyebrow}</Eyebrow>
         <Title>{work.title}</Title>
@@ -191,7 +190,7 @@ export const SECTIONS = [
     id: "contact",
     room: null,
     right: true,
-    content: (
+    content: ({ profile, projects, education, work, contact, ui }) => (
       <>
         <Eyebrow>{contact.eyebrow}</Eyebrow>
         <Title>{contact.title}</Title>
