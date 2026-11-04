@@ -1,18 +1,25 @@
 import {
+  BackSide,
   BoxGeometry,
   CanvasTexture,
   CatmullRomCurve3,
   CircleGeometry,
+  Color,
   ConeGeometry,
   CylinderGeometry,
   DoubleSide,
+  ExtrudeGeometry,
+  FrontSide,
   Group,
   LatheGeometry,
+  MathUtils,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
   PlaneGeometry,
   PointLight,
+  RepeatWrapping,
+  Shape,
   SRGBColorSpace,
   SphereGeometry,
   TorusGeometry,
@@ -23,97 +30,136 @@ import {
 
 // Objets de décor ajoutés aux pièces. Chacun est fait en mètres et renvoie { root, animate(time, night) }.
 
-// --- La Terre : une texture dessinée au chargement, continents tirés d'un bruit sur la sphère ---
+// --- À la place des globes : le cube violet de la chambre et la boule de cristal à quatre étoiles du bureau ---
+// Chacun tourne dans son `spinner`, un clic le fait tourner plus vite (voir Apartment)
 
-const hash = (x, y, z) => {
-  const s = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453
-  return s - Math.floor(s)
+// Petite suite pseudo-aléatoire : les motifs sont les mêmes à chaque visite
+function seeded(seed) {
+  let s = seed
+  return () => ((s = (s * 16807) % 2147483647) - 1) / 2147483646
 }
-function noise(x, y, z) {
-  const [ix, iy, iz] = [Math.floor(x), Math.floor(y), Math.floor(z)]
-  const [fx, fy, fz] = [x - ix, y - iy, z - iz].map((f) => f * f * (3 - 2 * f))
-  const lerp = (a, b, t) => a + (b - a) * t
-  const c = (dx, dy, dz) => hash(ix + dx, iy + dy, iz + dz)
-  return lerp(
-    lerp(lerp(c(0, 0, 0), c(1, 0, 0), fx), lerp(c(0, 1, 0), c(1, 1, 0), fx), fy),
-    lerp(lerp(c(0, 0, 1), c(1, 0, 1), fx), lerp(c(0, 1, 1), c(1, 1, 1), fx), fy),
-    fz,
-  )
-}
-const fbm = (x, y, z) => noise(x, y, z) * 0.55 + noise(x * 2, y * 2, z * 2) * 0.3 + noise(x * 4, y * 4, z * 4) * 0.15
 
-export function earthTexture() {
-  const w = 256, h = 128
+// Une face du cube : violet profond, gravée de lignes qui brillent
+function cubeFaceTexture() {
+  const n = 512
   const canvas = document.createElement("canvas")
-  canvas.width = w
-  canvas.height = h
+  canvas.width = canvas.height = n
   const g = canvas.getContext("2d")
-  const img = g.createImageData(w, h)
-  for (let j = 0; j < h; j++) {
-    const lat = (0.5 - j / h) * Math.PI
-    for (let i = 0; i < w; i++) {
-      const lon = (i / w) * Math.PI * 2
-      const [x, y, z] = [Math.cos(lat) * Math.cos(lon), Math.sin(lat), Math.cos(lat) * Math.sin(lon)]
-      const n = fbm(x * 2.2 + 5, y * 2.2 + 5, z * 2.2 + 5)
-      let rgb = [29, 95, 168] // océan
-      if (n > 0.52) rgb = n > 0.62 ? [150, 128, 80] : [63, 143, 58] // terres : désert ou forêt
-      else if (n > 0.49) rgb = [52, 128, 196] // eaux peu profondes
-      if (Math.abs(lat) > 1.2) rgb = [236, 242, 250] // calottes polaires
-      img.data.set([...rgb, 255], (j * w + i) * 4)
+  const glow = g.createRadialGradient(n / 2, n / 2, n * 0.1, n / 2, n / 2, n * 0.75)
+  glow.addColorStop(0, "#6a2bb8")
+  glow.addColorStop(1, "#2a0b52")
+  g.fillStyle = glow
+  g.fillRect(0, 0, n, n)
+  const rand = seeded(11)
+  g.strokeStyle = "#e3b8ff"
+  g.fillStyle = "#e3b8ff"
+  g.lineCap = "round"
+  g.shadowColor = "#c77dff"
+  g.shadowBlur = 18
+  // Le cadre de la face, puis des tracés en équerre qui partent du bord vers le centre
+  g.lineWidth = 10
+  g.strokeRect(26, 26, n - 52, n - 52)
+  g.lineWidth = 7
+  for (let k = 0; k < 14; k++) {
+    let x = 60 + Math.floor(rand() * 8) * 56, y = 60 + Math.floor(rand() * 8) * 56
+    g.beginPath()
+    g.moveTo(x, y)
+    for (let step = 0; step < 3; step++) {
+      if (rand() < 0.5) x += (rand() < 0.5 ? -1 : 1) * 56 * (1 + Math.floor(rand() * 2))
+      else y += (rand() < 0.5 ? -1 : 1) * 56 * (1 + Math.floor(rand() * 2))
+      x = Math.min(n - 60, Math.max(60, x))
+      y = Math.min(n - 60, Math.max(60, y))
+      g.lineTo(x, y)
     }
+    g.stroke()
+    g.beginPath()
+    g.arc(x, y, 10, 0, Math.PI * 2)
+    g.fill()
   }
-  g.putImageData(img, 0, 0)
   const texture = new CanvasTexture(canvas)
   texture.colorSpace = SRGBColorSpace
   return texture
 }
 
-// Les nuages : un autre bruit, blanc là où il est fort, transparent ailleurs
-export function cloudTexture() {
-  const w = 256, h = 128
-  const canvas = document.createElement("canvas")
-  canvas.width = w
-  canvas.height = h
-  const g = canvas.getContext("2d")
-  const img = g.createImageData(w, h)
-  for (let j = 0; j < h; j++) {
-    const lat = (0.5 - j / h) * Math.PI
-    for (let i = 0; i < w; i++) {
-      const lon = (i / w) * Math.PI * 2
-      const [x, y, z] = [Math.cos(lat) * Math.cos(lon), Math.sin(lat), Math.cos(lat) * Math.sin(lon)]
-      const n = fbm(x * 3 + 17, y * 6 + 3, z * 3 + 11)
-      img.data.set([255, 255, 255, Math.max(0, Math.min(1, (n - 0.55) * 5)) * 230], (j * w + i) * 4)
-    }
+// `size` : l'arête du cube, en unités du monde. Il flotte posé sur une pointe, et luit la nuit.
+export function makeGlowCube(size) {
+  const root = new Group()
+  const spinner = new Group()
+  root.add(spinner)
+  const face = cubeFaceTexture()
+  const material = new MeshStandardMaterial({ map: face, emissiveMap: face, emissive: "#ffffff", emissiveIntensity: 0.6, roughness: 0.35, metalness: 0.2 })
+  const cube = new Mesh(new BoxGeometry(size, size, size), material)
+  cube.rotation.set(Math.PI / 4, 0, Math.atan(1 / Math.SQRT2)) // en équilibre sur un sommet
+  cube.castShadow = true
+  spinner.add(cube)
+  // Un halo autour, plus fort la nuit
+  const halo = new Mesh(new SphereGeometry(size * 1.05, 24, 16), new MeshBasicMaterial({ color: "#b46bff", transparent: true, opacity: 0.12, depthWrite: false }))
+  root.add(halo)
+  const light = new PointLight("#b46bff", 1, size * 8, 2)
+  root.add(light)
+  return {
+    root,
+    spinner,
+    animate(time, night) {
+      spinner.position.y = Math.sin(time * 1.2) * size * 0.08
+      const pulse = 0.85 + Math.sin(time * 2) * 0.15
+      material.emissiveIntensity = (0.4 + 0.9 * night) * pulse
+      halo.material.opacity = (0.05 + 0.15 * night) * pulse
+      light.intensity = (0.3 + 1.5 * night) * pulse
+    },
   }
-  g.putImageData(img, 0, 0)
-  const texture = new CanvasTexture(canvas)
-  texture.colorSpace = SRGBColorSpace
-  return texture
 }
 
-// Remplace un globe gris par une Terre de la même taille, inclinée, qui tourne, avec ses nuages et son méridien doré
-export function makeEarth(radius, texture, clouds) {
-  const tilt = new Group()
-  tilt.rotation.z = 0.41 // l'inclinaison de la Terre
-  const earth = new Mesh(new SphereGeometry(radius, 32, 20), new MeshStandardMaterial({ map: texture, roughness: 0.7 }))
-  earth.castShadow = true
-  tilt.add(earth)
-  if (clouds) {
-    const sky = new Mesh(new SphereGeometry(radius * 1.025, 32, 20), new MeshStandardMaterial({ map: clouds, transparent: true, depthWrite: false, roughness: 1 }))
-    sky.rotation.y = 1.3
-    earth.add(sky)
+// La boule : du verre orange transparent, quatre étoiles rouges opaques qui flottent en son centre
+function starShape(r) {
+  const shape = new Shape()
+  for (let k = 0; k < 10; k++) {
+    const a = Math.PI / 2 + (k * Math.PI) / 5
+    const d = k % 2 ? r * 0.42 : r
+    if (k === 0) shape.moveTo(Math.cos(a) * d, Math.sin(a) * d)
+    else shape.lineTo(Math.cos(a) * d, Math.sin(a) * d)
   }
-  const gold = new MeshStandardMaterial({ color: "#d4a94a", metalness: 0.85, roughness: 0.3 })
-  const meridian = new Mesh(new TorusGeometry(radius * 1.1, radius * 0.035, 6, 40, Math.PI), gold)
-  meridian.rotation.z = -Math.PI / 2 // un demi-cercle d'un pôle à l'autre
-  tilt.add(meridian)
-  for (const y of [-1, 1]) {
-    const pin = new Mesh(new SphereGeometry(radius * 0.07, 8, 6), gold)
-    pin.position.y = y * radius * 1.1
-    tilt.add(pin)
-  }
-  return { root: tilt, spinner: earth }
+  shape.closePath()
+  return shape
 }
+
+// `radius` : celui de la boule, en unités du monde ; elle repose sur un petit coussin
+export function makeStarBall(radius) {
+  const root = new Group()
+  const spinner = new Group()
+  root.add(spinner)
+  const r = radius * 0.8
+  // Les étoiles : en relief, groupées au milieu, chacune un peu inclinée
+  const star = new ExtrudeGeometry(starShape(r * 0.2), { depth: r * 0.08, bevelEnabled: false })
+  star.center()
+  const red = new MeshStandardMaterial({ color: "#d8261c", emissive: "#a01008", emissiveIntensity: 0.3, roughness: 0.4 })
+  for (const [x, y, z] of [[-0.24, 0.22, 0.06], [0.24, 0.22, -0.06], [-0.22, -0.22, -0.05], [0.22, -0.22, 0.05]]) {
+    const mesh = new Mesh(star, red)
+    mesh.position.set(x * r, y * r, z * r)
+    mesh.rotation.y = x * 0.6
+    spinner.add(mesh)
+  }
+  // Le verre, vu de l'intérieur puis de l'extérieur, pour qu'on voie les étoiles à travers
+  const glass = new MeshStandardMaterial({ color: "#ffa21f", emissive: "#ff7a10", emissiveIntensity: 0.15, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.4, depthWrite: false })
+  for (const side of [BackSide, FrontSide]) {
+    const ball = new Mesh(new SphereGeometry(r, 40, 28), glass.clone())
+    ball.material.side = side
+    spinner.add(ball)
+  }
+  const cushion = new Mesh(new TorusGeometry(radius * 0.42, radius * 0.16, 10, 24), new MeshStandardMaterial({ color: "#8a1f2a", roughness: 0.9 }))
+  cushion.rotation.x = Math.PI / 2
+  cushion.position.y = -radius * 0.78
+  root.add(cushion)
+  return {
+    root,
+    spinner,
+    animate(time, night) {
+      red.emissiveIntensity = 0.25 + 0.5 * night
+      spinner.children.forEach((child) => child.material !== red && (child.material.emissiveIntensity = 0.12 + 0.35 * night))
+    },
+  }
+}
+
 
 // --- Guirlande lumineuse au-dessus de la fenêtre de la chambre ---
 
@@ -359,89 +405,217 @@ export function makeBanana() {
   return { root, animate() {} }
 }
 
-// --- Switch réseau aux diodes qui clignotent, sur le bureau du NOC ---
-// Les ports font face au personnage (-z), le dessus porte des aérations et une étiquette
+// --- Mini baie réseau sur le bureau du NOC : panneau de brassage, switch et NAS, reliés par des jarretières ---
 
-function switchTop() {
+// En mètres, l'origine au centre du dessous, la façade vers -z (côté personnage)
+const RACK = { width: 0.3, depth: 0.22, height: 0.22, wall: 0.008, ports: 8, pitch: 0.024 }
+const PATCH_COLORS = ["#2a6cff", "#ffd23a", "#e0453a", "#2fb35a", "#d9dde5", "#ff8a2a", "#9a5aff", "#2a6cff"]
+
+// Abscisse du port `k` (0 = le plus à gauche vu de face, donc côté +x)
+const portX = (k) => ((RACK.ports - 1) / 2 - k) * RACK.pitch
+
+// Façade imprimée d'un appareil : `draw(g, w, h, xToPx)` dessine sur un canevas aux proportions de la façade
+function faceTexture(width, height, draw) {
+  const w = 1024, h = Math.round((w * height) / width)
   const canvas = document.createElement("canvas")
-  canvas.width = 256
-  canvas.height = 128
+  canvas.width = w
+  canvas.height = h
   const g = canvas.getContext("2d")
-  g.fillStyle = "#59606e"
-  g.fillRect(0, 0, 256, 128)
-  g.fillStyle = "#3a404b"
-  for (let k = 0; k < 9; k++) g.fillRect(150 + k * 10, 24, 5, 80) // aérations
-  g.fillStyle = "#e8ecf2"
-  g.fillRect(18, 22, 116, 34)
-  g.fillStyle = "#1a1d6a"
-  g.font = "bold 22px sans-serif"
-  g.fillText("SW-NOC-01", 24, 47)
-  g.fillStyle = "#3dff7a"
-  g.beginPath()
-  g.arc(30, 88, 7, 0, Math.PI * 2)
-  g.fill()
-  g.fillStyle = "#d9dde5"
-  g.font = "18px sans-serif"
-  g.fillText("48 × 1G · 4 × 10G", 44, 94)
+  draw(g, w, h, (x) => (0.5 - x / width) * w)
   const texture = new CanvasTexture(canvas)
   texture.colorSpace = SRGBColorSpace
-  // Retournée pour se lire depuis l'avant du switch, côté personnage
-  texture.center.set(0.5, 0.5)
-  texture.rotation = Math.PI
+  texture.anisotropy = 8
   return texture
+}
+
+// Un appareil de 1U : une boîte dont seule la façade (-z) porte la texture
+function rackUnit(height, color, draw) {
+  const W = RACK.width - 2 * RACK.wall
+  const body = new MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.4 })
+  const face = new MeshStandardMaterial({ map: faceTexture(W, height, draw), roughness: 0.55, metalness: 0.2 })
+  // Faces de la boîte : +x, -x, +y, -y, +z, -z
+  const mesh = new Mesh(new BoxGeometry(W, height, RACK.depth - 0.03), [body, body, body, body, body, face])
+  mesh.castShadow = true
+  return mesh
+}
+
+const label = (g, text, x, y, size, color, align = "left") => {
+  g.fillStyle = color
+  g.font = `bold ${size}px sans-serif`
+  g.textAlign = align
+  g.textBaseline = "middle"
+  g.fillText(text, x, y)
 }
 
 export function makeSwitch() {
   const root = new Group()
-  const metal = new MeshStandardMaterial({ color: "#59606e", roughness: 0.45, metalness: 0.35 })
-  const top = new MeshStandardMaterial({ map: switchTop(), roughness: 0.5, metalness: 0.2 })
-  // Faces de la boîte : +x, -x, +y (le dessus), -y, +z, -z
-  const box = new Mesh(new BoxGeometry(0.44, 0.06, 0.24), [metal, metal, top, metal, metal, metal])
-  box.position.y = 0.03
-  box.castShadow = true
-  root.add(box)
-  const front = new Mesh(new BoxGeometry(0.42, 0.045, 0.004), new MeshStandardMaterial({ color: "#2a2e36", roughness: 0.6 }))
-  front.position.set(0, 0.03, -0.121)
-  root.add(front)
-  const port = new MeshStandardMaterial({ color: "#0c0d12" })
+  const { width: W, depth: D, height: H, wall } = RACK
+  const front = -D / 2
+  const steel = new MeshStandardMaterial({ color: "#23262d", roughness: 0.5, metalness: 0.6 })
+
+  // Le caisson : flancs, dessus, fond et dos fermés, façade ouverte
+  for (const [w, h, d, x, y, z] of [
+    [wall, H, D, W / 2 - wall / 2, H / 2, 0],
+    [wall, H, D, -W / 2 + wall / 2, H / 2, 0],
+    [W, wall, D, 0, H - wall / 2, 0],
+    [W, wall, D, 0, wall / 2, 0],
+    [W, H, wall, 0, H / 2, D / 2 - wall / 2],
+  ]) {
+    const panel = new Mesh(new BoxGeometry(w, h, d), steel)
+    panel.position.set(x, y, z)
+    panel.castShadow = true
+    root.add(panel)
+  }
+  // Grille d'aération sur les flancs, et quatre petits pieds
+  const slot = new MeshStandardMaterial({ color: "#0c0d10" })
+  for (const side of [-1, 1]) {
+    for (let k = 0; k < 6; k++) {
+      const vent = new Mesh(new BoxGeometry(0.002, 0.008, 0.12), slot)
+      vent.position.set(side * (W / 2 + 0.0005), H - 0.05 - k * 0.016, 0.01)
+      root.add(vent)
+    }
+  }
+  const rubber = new MeshStandardMaterial({ color: "#111111", roughness: 0.9 })
+  for (const [x, z] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
+    const foot = new Mesh(new CylinderGeometry(0.01, 0.01, 0.006, 10), rubber)
+    foot.position.set(x * (W / 2 - 0.025), -0.003, z * (D / 2 - 0.025))
+    root.add(foot)
+  }
+
+  const U = 0.044
   const leds = []
-  for (let row = 0; row < 2; row++) {
-    for (let k = 0; k < 12; k++) {
-      const x = -0.18 + k * 0.03
-      const y = 0.018 + row * 0.022
-      const socket = new Mesh(new BoxGeometry(0.022, 0.014, 0.004), port)
-      socket.position.set(x, y, -0.124)
-      root.add(socket)
-      const material = new MeshStandardMaterial({ color: "#0a2a12", emissive: (k + row) % 5 ? "#3dff7a" : "#ffb02e", emissiveIntensity: 1 })
-      const led = new Mesh(new BoxGeometry(0.006, 0.004, 0.004), material)
-      led.position.set(x + 0.007, y + 0.009, -0.124)
+  const sockets = new MeshStandardMaterial({ color: "#07080b" })
+  const unitZ = front + 0.015 + (D - 0.03) / 2 // les appareils affleurent la façade
+  // Une prise RJ45 creusée dans la façade, avec ses diodes si elle en a
+  const addPort = (x, y, withLeds) => {
+    const socket = new Mesh(new BoxGeometry(0.016, 0.013, 0.004), sockets)
+    socket.position.set(x, y, front + 0.0135)
+    root.add(socket)
+    if (!withLeds) return
+    for (const dx of [-0.0055, 0.0055]) {
+      const material = new MeshStandardMaterial({ color: "#0a2a12", emissive: dx < 0 ? "#3dff7a" : "#ffb02e", emissiveIntensity: 1 })
+      const led = new Mesh(new BoxGeometry(0.003, 0.002, 0.002), material)
+      led.position.set(x + dx, y + 0.0085, front + 0.0145)
       root.add(led)
       leds.push(material)
     }
   }
-  // Câbles branchés sur quelques ports : la prise, puis le câble qui part vers l'intérieur du bureau, derrière les écrans
-  const colors = ["#2a6cff", "#ffd23a", "#d9dde5", "#e0453a", "#2fb35a"]
-  ;[0, 1, 3, 4, 6, 9, 13, 14, 16, 20].forEach((port, k) => {
-    const row = Math.floor(port / 12), col = port % 12
-    const x = -0.18 + col * 0.03, y = 0.018 + row * 0.022
-    const material = new MeshStandardMaterial({ color: colors[k % colors.length], roughness: 0.6 })
-    const plug = new Mesh(new BoxGeometry(0.018, 0.012, 0.022), material)
-    plug.position.set(x, y, -0.135)
-    root.add(plug)
-    const out = 0.3 + k * 0.006
-    const path = new CatmullRomCurve3([
-      new Vector3(x, y, -0.146),
-      new Vector3(x - 0.01, y * 0.4, -0.18 - k * 0.003),
-      new Vector3((x - out) / 2, 0.005, -0.19 - k * 0.003),
-      new Vector3(-out, 0.005, -0.12),
-      new Vector3(-out - 0.02, 0.005, 0.12),
-    ])
-    root.add(new Mesh(new TubeGeometry(path, 24, 0.0035, 5), material))
+
+  // En haut, le panneau de brassage : chaque prise est numérotée et nommée (la pièce où arrive le câble)
+  const ROOMS = ["NOC", "NOC", "SALLE", "SALLE", "BUR-1", "BUR-2", "IMPR", "WIFI"]
+  const patchY = H - wall - 0.012 - U / 2
+  const patch = rackUnit(U, "#2b2f38", (g, w, h, px) => {
+    g.fillStyle = "#2b2f38"
+    g.fillRect(0, 0, w, h)
+    label(g, "PATCH", 22, h * 0.5, 30, "#d9dde5")
+    for (let k = 0; k < RACK.ports; k++) {
+      const x = px(portX(k))
+      // Étiquette blanche au-dessus de la prise, et son numéro en dessous
+      g.fillStyle = "#f2f2ec"
+      g.fillRect(x - 40, 6, 80, 30)
+      label(g, ROOMS[k], x, 22, 20, "#1a1d24", "center")
+      label(g, String(k + 1).padStart(2, "0"), x, h - 20, 22, "#ffd23a", "center")
+    }
   })
+  patch.position.set(0, patchY, unitZ)
+  root.add(patch)
+
+  // Au milieu, le switch : sa marque, ses ports numérotés, sa diode d'alimentation
+  const switchY = patchY - U - 0.022
+  const sw = rackUnit(U, "#3a4150", (g, w, h, px) => {
+    g.fillStyle = "#3a4150"
+    g.fillRect(0, 0, w, h)
+    g.fillStyle = "#2a6cff"
+    g.fillRect(0, 0, w, 8)
+    label(g, "GC-NET", 22, h * 0.42, 34, "#ffffff")
+    label(g, "SW-8 · 1G", 22, h * 0.75, 20, "#9aa3b5")
+    for (let k = 0; k < RACK.ports; k++) label(g, String(k + 1), px(portX(k)), h - 18, 20, "#d9dde5", "center")
+  })
+  sw.position.set(0, switchY, unitZ)
+  root.add(sw)
+  const power = new Mesh(new SphereGeometry(0.003, 8, 6), new MeshStandardMaterial({ color: "#0a2a12", emissive: "#3dff7a", emissiveIntensity: 2 }))
+  power.position.set(-W / 2 + 0.03, switchY, front + 0.014)
+  root.add(power)
+
+  // En bas, le NAS : deux tiroirs de disques avec leurs voyants
+  const nasY = wall + 0.006 + 0.03
+  const nas = rackUnit(0.06, "#1c1f26", (g, w, h) => {
+    g.fillStyle = "#1c1f26"
+    g.fillRect(0, 0, w, h)
+    for (const x of [w * 0.22, w * 0.5]) {
+      g.fillStyle = "#2c313c"
+      g.fillRect(x - 120, 18, 240, h - 36)
+      g.fillStyle = "#14161b"
+      for (let k = 0; k < 6; k++) g.fillRect(x - 100, 32 + k * 18, 200, 6)
+    }
+    label(g, "NAS", w * 0.72, h * 0.4, 40, "#d9dde5", "center")
+    label(g, "2 × 4 To", w * 0.72, h * 0.7, 22, "#9aa3b5", "center")
+  })
+  nas.position.set(0, nasY, unitZ)
+  root.add(nas)
+  for (const x of [W * 0.28, W * 0]) {
+    const material = new MeshStandardMaterial({ color: "#0a1a2a", emissive: "#3da5ff", emissiveIntensity: 1 })
+    const led = new Mesh(new BoxGeometry(0.004, 0.004, 0.002), material)
+    led.position.set(x - 0.03, nasY + 0.022, front + 0.0145)
+    root.add(led)
+    leds.push(material)
+  }
+
+  // Les prises, puis les jarretières : de chaque prise du panneau à la même prise du switch, en une boucle courte
+  for (let k = 0; k < RACK.ports; k++) {
+    addPort(portX(k), patchY - 0.003, false)
+    addPort(portX(k), switchY - 0.003, true)
+  }
+  const nasPort = { x: -W / 2 + 0.06, y: nasY - 0.012 }
+  addPort(nasPort.x, nasPort.y, false)
+  const cable = (a, b, color, reach) => {
+    const material = new MeshStandardMaterial({ color, roughness: 0.6 })
+    // Prise transparente à chaque bout, avec son manchon de la couleur du câble
+    for (const end of [a, b]) {
+      const plug = new Mesh(new BoxGeometry(0.014, 0.011, 0.018), material)
+      plug.position.set(end.x, end.y, front + 0.005)
+      root.add(plug)
+    }
+    const out = front - 0.004
+    const path = new CatmullRomCurve3([
+      new Vector3(a.x, a.y, out),
+      new Vector3(a.x, a.y - 0.004, out - reach * 0.6),
+      new Vector3((a.x + b.x) / 2, (a.y + b.y) / 2, out - reach),
+      new Vector3(b.x, b.y + 0.004, out - reach * 0.6),
+      new Vector3(b.x, b.y, out),
+    ])
+    root.add(new Mesh(new TubeGeometry(path, 20, 0.0028, 6), material))
+  }
+  for (let k = 0; k < RACK.ports - 1; k++) {
+    cable({ x: portX(k), y: patchY - 0.003 }, { x: portX(k), y: switchY - 0.003 }, PATCH_COLORS[k], 0.022 + (k % 3) * 0.006)
+  }
+  // Le dernier port du switch descend vers le NAS
+  cable({ x: portX(RACK.ports - 1), y: switchY - 0.003 }, nasPort, PATCH_COLORS[RACK.ports - 1], 0.035)
+
+  // Sur le dessus, la box wifi et ses deux antennes
+  const white = new MeshStandardMaterial({ color: "#eef0f3", roughness: 0.5 })
+  const router = new Mesh(new BoxGeometry(0.16, 0.03, 0.11), white)
+  router.position.set(0.03, H + 0.015, 0.01)
+  router.castShadow = true
+  root.add(router)
+  for (const side of [-1, 1]) {
+    const antenna = new Mesh(new CylinderGeometry(0.004, 0.005, 0.11, 8), white)
+    antenna.position.set(0.03 + side * 0.065, H + 0.075, 0.06)
+    antenna.rotation.z = side * -0.25
+    root.add(antenna)
+  }
+  for (let k = 0; k < 4; k++) {
+    const material = new MeshStandardMaterial({ color: "#0a1a2a", emissive: "#3da5ff", emissiveIntensity: 1 })
+    const led = new Mesh(new BoxGeometry(0.006, 0.003, 0.002), material)
+    led.position.set(0.09 - k * 0.014, H + 0.018, 0.01 - 0.056)
+    root.add(led)
+    leds.push(material)
+  }
+
   return {
     root,
     animate(time) {
-      // Chaque port clignote à son rythme, comme du trafic
+      // Chaque diode clignote à son rythme, comme du trafic
       leds.forEach((led, k) => (led.emissiveIntensity = Math.sin(time * (6 + (k % 7) * 1.7) + k * 2.3) > 0.2 ? 2 : 0.2))
     },
   }
@@ -1186,4 +1360,290 @@ export function persianRugTexture(aspect) {
   texture.colorSpace = SRGBColorSpace
   texture.anisotropy = 8
   return texture
+}
+
+// --- La salle serveurs du bureau : deux baies 42U derrière des portes vitrées sécurisées ---
+
+// Façade d'une baie 42U, de haut en bas : brassage et switchs, pare-feu, serveurs, onduleur.
+// Rend aussi l'emplacement des diodes (en fraction de la façade) pour les faire clignoter en 3D.
+function rackFront(name, seed) {
+  const w = 480, u = 38, h = u * 42 + 40
+  const canvas = document.createElement("canvas")
+  canvas.width = w
+  canvas.height = h
+  const g = canvas.getContext("2d")
+  const rand = seeded(seed)
+  const leds = []
+  g.fillStyle = "#0b0c10"
+  g.fillRect(0, 0, w, h)
+  // Les montants percés de chaque côté
+  g.fillStyle = "#1c1f27"
+  g.fillRect(0, 0, 26, h)
+  g.fillRect(w - 26, 0, 26, h)
+  g.fillStyle = "#07080b"
+  for (let y = 24; y < h; y += u / 3) {
+    g.fillRect(9, y, 8, 5)
+    g.fillRect(w - 17, y, 8, 5)
+  }
+  g.fillStyle = "#ffd23a"
+  g.font = "bold 22px sans-serif"
+  g.textBaseline = "middle"
+  g.fillText(name, 34, 20)
+  const x0 = 30, x1 = w - 30, span = x1 - x0
+  let row = 0
+  const unit = (size, color) => {
+    const y = 40 + row * u
+    row += size
+    g.fillStyle = color
+    g.fillRect(x0, y + 1, span, size * u - 2)
+    return y
+  }
+  const text = (str, x, y, size, color) => {
+    g.fillStyle = color
+    g.font = `bold ${size}px sans-serif`
+    g.fillText(str, x, y)
+  }
+  const ports = (y, n, withLeds) => {
+    for (let k = 0; k < n; k++) {
+      const x = x0 + 70 + (k % 12) * 26 + Math.floor(k / 12) * 8
+      const py = y + 8 + Math.floor((k % 24) / 12) * 14
+      g.fillStyle = "#050507"
+      g.fillRect(x, py, 18, 11)
+      if (withLeds && rand() < 0.7) leds.push([(x + 9) / w, (py - 2) / h, rand() < 0.85 ? "#3dff7a" : "#ffb02e"])
+    }
+  }
+  const colors = ["#2a6cff", "#ffd23a", "#e0453a", "#2fb35a", "#d9dde5", "#ff8a2a", "#9a5aff"]
+  // Deux paires panneau de brassage + switch, et leurs jarretières qui retombent en boucle
+  for (let pair = 0; pair < 2; pair++) {
+    const py = unit(1, "#2b2f38")
+    text("PP-" + (pair + 1), x0 + 8, py + u / 2, 13, "#d9dde5")
+    ports(py, 24, false)
+    unit(1, "#15171d") // passe-câbles
+    const sy = unit(1, "#3a4150")
+    text("SW-" + (pair + 1), x0 + 8, sy + u / 2, 13, "#ffffff")
+    ports(sy, 24, true)
+    g.lineWidth = 4
+    for (let k = 0; k < 24; k++) {
+      if (rand() < 0.25) continue
+      const x = x0 + 79 + (k % 12) * 26 + Math.floor(k / 12) * 8
+      const a = py + 14 + Math.floor(k / 12) * 14, b = sy + 14 + Math.floor(k / 12) * 14
+      g.strokeStyle = colors[Math.floor(rand() * colors.length)]
+      g.beginPath()
+      g.moveTo(x, a)
+      g.bezierCurveTo(x + 6, a + u * 0.6, x + 6, b - u * 0.6, x, b)
+      g.stroke()
+    }
+    unit(1, "#0e1014")
+  }
+  // Le pare-feu, liseré rouge
+  const fw = unit(2, "#2a2d35")
+  g.fillStyle = "#e0453a"
+  g.fillRect(x0, fw + 1, 8, 2 * u - 2)
+  text("FIREWALL · HA", x0 + 18, fw + u * 0.7, 16, "#ffffff")
+  ports(fw + u * 0.9, 8, true)
+  unit(1, "#0e1014")
+  // Les serveurs : tiroirs de disques et voyants
+  for (let k = 0; k < 7; k++) {
+    const y = unit(2, k % 2 ? "#2c3039" : "#30343e")
+    text("SRV-" + String(k + 1).padStart(2, "0"), x0 + 10, y + u * 0.5, 13, "#9aa3b5")
+    for (let d = 0; d < 8; d++) {
+      const x = x0 + 90 + d * 36
+      g.fillStyle = "#1a1c22"
+      g.fillRect(x, y + 8, 30, 2 * u - 18)
+      g.fillStyle = "#101116"
+      for (let l = 0; l < 4; l++) g.fillRect(x + 4, y + 16 + l * 10, 22, 4)
+      if (rand() < 0.8) leds.push([(x + 26) / w, (y + 2 * u - 14) / h, rand() < 0.9 ? "#3da5ff" : "#3dff7a"])
+    }
+  }
+  // Panneaux d'obturation, puis l'onduleur en bas avec son petit écran
+  while (row < 38) unit(1, "#121419")
+  const ups = unit(4, "#22252d")
+  text("UPS 3000", x0 + 14, ups + u * 0.8, 20, "#ffffff")
+  g.fillStyle = "#3dff7a"
+  g.fillRect(x0 + 230, ups + 20, 140, 48)
+  g.fillStyle = "#0b2a14"
+  g.font = "bold 22px monospace"
+  g.fillText("100%", x0 + 262, ups + 45)
+  const texture = new CanvasTexture(canvas)
+  texture.colorSpace = SRGBColorSpace
+  texture.anisotropy = 8
+  return { texture, leds }
+}
+
+// Une baie, en mètres : l'origine au sol au centre, la façade vers +z, les équipements un peu en retrait
+function makeServerRack(name, seed) {
+  const root = new Group()
+  const W = 0.6, H = 2, D = 0.5 // vues de face seulement : peu profondes, pour que la salle reste fine
+  const steel = new MeshStandardMaterial({ color: "#16181e", roughness: 0.5, metalness: 0.6 })
+  for (const [w, h, d, x, y, z] of [
+    [0.03, H, D, -W / 2 + 0.015, H / 2, 0],
+    [0.03, H, D, W / 2 - 0.015, H / 2, 0],
+    [W, 0.04, D, 0, H - 0.02, 0],
+    [W, 0.06, D, 0, 0.03, 0],
+  ]) {
+    const panel = new Mesh(new BoxGeometry(w, h, d), steel)
+    panel.position.set(x, y, z)
+    panel.castShadow = true
+    root.add(panel)
+  }
+  const { texture, leds } = rackFront(name, seed)
+  const fw = W - 0.06, fh = H - 0.1
+  const face = new Mesh(new PlaneGeometry(fw, fh), new MeshStandardMaterial({ map: texture, emissiveMap: texture, emissive: "#ffffff", emissiveIntensity: 0.25, roughness: 0.6 }))
+  face.position.set(0, 0.06 + fh / 2, D / 2 - 0.04)
+  root.add(face)
+  const materials = new Map()
+  const blinking = leds.map(([u, v, color], k) => {
+    if (!materials.has(color)) materials.set(color, [0, 1, 2].map(() => new MeshBasicMaterial({ color })))
+    const led = new Mesh(new BoxGeometry(0.006, 0.004, 0.004), materials.get(color)[0])
+    led.position.set((u - 0.5) * fw, 0.06 + (1 - v) * fh, D / 2 - 0.036)
+    root.add(led)
+    return { led, states: materials.get(color), phase: k * 7.3 }
+  })
+  const off = new MeshBasicMaterial({ color: "#0c0e12" })
+  return {
+    root,
+    animate(time) {
+      blinking.forEach(({ led, states, phase }, k) => {
+        const on = Math.sin(time * (5 + (k % 9) * 1.3) + phase) > -0.3
+        led.material = on ? states[0] : off
+      })
+    },
+  }
+}
+
+// La vitre des portes : une sérigraphie discrète (bandes dépolies), la vitre devient claire au survol
+function doorGlassTexture() {
+  const w = 512, h = 512
+  const canvas = document.createElement("canvas")
+  canvas.width = w
+  canvas.height = h
+  const g = canvas.getContext("2d")
+  g.fillStyle = "#ffffff"
+  g.fillRect(0, 0, w, h)
+  g.fillStyle = "#d6e2ec"
+  for (let y = 0; y < h; y += 12) g.fillRect(0, y, w, 5)
+  const texture = new CanvasTexture(canvas)
+  texture.colorSpace = SRGBColorSpace
+  return texture
+}
+
+// Le panneau collé sur les portes
+function doorSignTexture() {
+  const w = 512, h = 160
+  const canvas = document.createElement("canvas")
+  canvas.width = w
+  canvas.height = h
+  const g = canvas.getContext("2d")
+  g.fillStyle = "#ffd23a"
+  g.fillRect(0, 0, w, h)
+  g.fillStyle = "#14161b"
+  for (let x = -h; x < w; x += 40) {
+    g.beginPath()
+    g.moveTo(x, 0)
+    g.lineTo(x + 20, 0)
+    g.lineTo(x + 20 + h, h)
+    g.lineTo(x + h, h)
+    g.fill()
+  }
+  g.fillStyle = "#ffd23a"
+  g.fillRect(14, 14, w - 28, h - 28)
+  g.fillStyle = "#14161b"
+  g.textAlign = "center"
+  g.textBaseline = "middle"
+  g.font = "bold 50px sans-serif"
+  g.fillText("SALLE SERVEURS", w / 2, 62)
+  g.font = "bold 28px sans-serif"
+  g.fillText("ACCÈS RESTREINT · BADGE", w / 2, 112)
+  const texture = new CanvasTexture(canvas)
+  texture.colorSpace = SRGBColorSpace
+  return texture
+}
+
+// La salle derrière la fenêtre, en unités du monde : l'origine au bas de l'ouverture, en son milieu,
+// la pièce du bureau vers +z et la salle vers -z. `scale` : unités du monde par mètre ;
+// `walls` : le matériau des murs de l'immeuble, pour que la salle ait l'air d'en faire partie vue de dehors.
+export function makeServerRoom(width, height, scale, walls) {
+  const root = new Group()
+  // Les deux baies, une derrière chaque vantail, presque aussi hautes que les portes
+  const rackScale = (height * 0.85) / 2
+  const depth = 0.7 * rackScale
+  // Le faux plancher : des dalles grises
+  const tiles = document.createElement("canvas")
+  tiles.width = tiles.height = 128
+  const t = tiles.getContext("2d")
+  t.fillStyle = "#5a606c"
+  t.fillRect(0, 0, 128, 128)
+  t.strokeStyle = "#2a2e36"
+  t.lineWidth = 4
+  t.strokeRect(0, 0, 128, 128)
+  const floorMap = new CanvasTexture(tiles)
+  floorMap.colorSpace = SRGBColorSpace
+  floorMap.wrapS = floorMap.wrapT = RepeatWrapping
+  floorMap.repeat.set(width / (0.6 * scale), depth / (0.6 * scale))
+  const W = width * 1.04, wall = 0.05 * scale // à peine plus large que l'ouverture : la salle reste cachée derrière le mur
+  for (const [w, h, d, x, y, z, material] of [
+    [W, wall, depth, 0, -wall / 2, -depth / 2, new MeshStandardMaterial({ map: floorMap, roughness: 0.7 })],
+    [W, wall, depth, 0, height + wall / 2, -depth / 2, walls],
+    [W, height + 2 * wall, wall, 0, height / 2, -depth - wall / 2, walls],
+    [wall, height + 2 * wall, depth, -W / 2, height / 2, -depth / 2, walls],
+    [wall, height + 2 * wall, depth, W / 2, height / 2, -depth / 2, walls],
+  ]) {
+    const panel = new Mesh(new BoxGeometry(w, h, d), material)
+    panel.position.set(x, y, z)
+    panel.receiveShadow = true
+    root.add(panel)
+  }
+  // Néon froid au plafond, et sa lumière
+  const strip = new Mesh(new BoxGeometry(width * 0.7, 0.02 * scale, 0.06 * scale), new MeshBasicMaterial({ color: "#cfe6ff" }))
+  strip.position.set(0, height - 0.02 * scale, -depth * 0.25)
+  root.add(strip)
+  const light = new PointLight("#9fc8ff", 2, depth * 3, 2)
+  light.position.set(0, height * 0.8, -depth * 0.3)
+  root.add(light)
+
+  const racks = [["BAIE A01", 3], ["BAIE A02", 8]].map(([name, seed], k) => {
+    const rack = makeServerRack(name, seed)
+    rack.root.scale.setScalar(rackScale)
+    rack.root.position.set((k ? 1 : -1) * width * 0.25, 0, -depth + 0.3 * rackScale)
+    root.add(rack.root)
+    return rack
+  })
+
+  // Les portes : la vitre, le panneau, les poignées et le lecteur de badge
+  const glass = new Mesh(
+    new PlaneGeometry(width * 0.96, height * 0.96),
+    new MeshStandardMaterial({ map: doorGlassTexture(), color: "#b9cfe0", roughness: 0.2, metalness: 0.3, transparent: true, opacity: 0.9, depthWrite: false, side: DoubleSide }),
+  )
+  glass.position.set(0, height / 2, 0)
+  root.add(glass)
+  const sign = new Mesh(new PlaneGeometry(0.5 * scale, 0.156 * scale), new MeshStandardMaterial({ map: doorSignTexture(), roughness: 0.6 }))
+  sign.position.set(-width * 0.25, height * 0.72, 0.006 * scale) // sur le vantail de gauche, pas à cheval sur les deux
+  root.add(sign)
+  const chrome = new MeshStandardMaterial({ color: "#c9ced8", roughness: 0.2, metalness: 0.9 })
+  for (const side of [-1, 1]) {
+    const handle = new Mesh(new CylinderGeometry(0.012 * scale, 0.012 * scale, 0.4 * scale, 10), chrome)
+    handle.position.set(side * 0.08 * scale, height * 0.45, 0.04 * scale)
+    root.add(handle)
+  }
+  const reader = new Mesh(new BoxGeometry(0.08 * scale, 0.12 * scale, 0.025 * scale), new MeshStandardMaterial({ color: "#1a1c22", roughness: 0.5 }))
+  reader.position.set(0.22 * scale, height * 0.5, 0.015 * scale)
+  root.add(reader)
+  const badgeLed = new MeshStandardMaterial({ color: "#2a0a0a", emissive: "#ff3a2a", emissiveIntensity: 2 })
+  const led = new Mesh(new SphereGeometry(0.01 * scale, 8, 6), badgeLed)
+  led.position.set(0.22 * scale, height * 0.5 + 0.035 * scale, 0.03 * scale)
+  root.add(led)
+
+  const red = new Color("#ff3a2a"), green = new Color("#3dff7a")
+  return {
+    root,
+    glass,
+    animate(time) {
+      for (const rack of racks) rack.animate(time)
+    },
+    // `open` (0 à 1) : la vitre s'éclaircit et le lecteur passe au vert
+    open(amount) {
+      glass.material.opacity = MathUtils.lerp(0.9, 0.06, amount)
+      badgeLed.emissive.lerpColors(red, green, amount)
+    },
+  }
 }

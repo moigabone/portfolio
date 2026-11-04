@@ -4,6 +4,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber"
 import { Environment, Lightformer, ScrollControls, Stars } from "@react-three/drei"
 import { Color, MathUtils, NeutralToneMapping, Vector3 } from "three"
 import Apartment from "./Apartment"
+import DaySky from "./DaySky"
 import Overlay from "./Overlay"
 import Loader from "./Loader"
 import Elevator, { ScrollBridge } from "./Elevator"
@@ -72,6 +73,7 @@ function Lights({ day, reducedMotion }) {
       <group ref={stars}>
         <Stars radius={60} depth={40} count={2500} factor={3} saturation={0} fade speed={reducedMotion ? 0 : 0.4} />
       </group>
+      <DaySky day={day} reducedMotion={reducedMotion} />
     </>
   )
 }

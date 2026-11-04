@@ -30,12 +30,10 @@ import { animateDog, makeDog } from "./Dog"
 import {
   BOOKS,
   bookTexture,
-  cloudTexture,
-  earthTexture,
   fourierTexture,
   makeBackpack,
   makeClock,
-  makeEarth,
+  makeGlowCube,
   makeGamingPC,
   makeGarland,
   makeHeadset,
@@ -48,6 +46,8 @@ import {
   makeBanana,
   makeNotebook,
   makeSchoolPC,
+  makeServerRoom,
+  makeStarBall,
   makeSwitch,
   makeWaterBottle,
   persianRugTexture,
@@ -117,14 +117,15 @@ const DOG = { forward: 0.9, scale: 1, facing: -Math.PI / 2.4, awakeSeconds: 4, p
 
 // Décor ajouté, placé par rapport à la chaise de chaque pièce (en mètres) :
 // `ahead` vers l'écran, `aside` sur le côté du personnage
-const WATER = { ahead: 0.42, aside: 0.32 } // au boulot, de l'eau…
+const WATER = { ahead: 0.3, aside: -0.62 } // au boulot, de l'eau…
 const BANANA = { ahead: 0.62, aside: -0.45 } // …et une banane
-const SWITCH = { ahead: 0.5, aside: 0.8 }
+const SERVER_WINDOW = { room: "bureau", material: "UberTexture", vertices: 1466 } // la fenêtre du bureau : la salle serveurs est derrière
+const BUREAU_WALLS = { material: "Material", vertices: 142 } // les murs du bureau
 const BACKPACK = { ahead: -0.05, aside: 0.5 }
 const GARLAND = { above: 0.12, overhang: 0.15, sag: 0.12 } // au-dessus de la fenêtre de la chambre
 const LAVA_LAMP = { ahead: 0.8, aside: -0.75 } // au bout du bureau de la chambre
 const HEADSET = { ahead: 0.62, aside: 1.02 } // sur son support, entre le PC et l'écran
-const NOTEBOOK = { ahead: 0.36, aside: 0.5, lift: 0.012, size: 0.7 } // entre les deux postes, au bord de la table ; format A5, posé sur le plateau (un peu au-dessus de l'estimation)
+const NOTEBOOK = { ahead: 0.57, aside: 0.8, lift: 0.012, size: 0.6 } // entre les deux postes, bien sur le plateau ; format A5, posé sur le plateau (un peu au-dessus de l'estimation)
 // Les tours du modèle, remplacées par des versions détaillées de la même taille
 const TOWER = { material: "Matériau.041", vertices: 820 } // le PC de la chambre devient un PC gamer
 const TOWER_GLASS = { material: "PC_Glass", vertices: 4 } // sa vitre d'origine
@@ -349,6 +350,7 @@ function measure(room, chairSpec) {
   const facing = flat(screenCenter).sub(flat(center)).normalize()
   return {
     center,
+    screens: screens.reduce((sum, p) => sum.add(p), new Vector3()).divideScalar(screens.length), // le milieu de tous les écrans
     floor: seat.min.y,
     deskTop,
     scale: (deskTop - seat.min.y) / DESK_HEIGHT,
@@ -621,6 +623,8 @@ export default function Apartment({ reducedMotion = false, day }) {
     dogWake: -99,
     globeSpin: 0,
     glow: { banner: 0, ecritel: 0 },
+    bannerPhase: 0,
+    vaultOpen: 0, // 0 : portes dépolies, 1 : on voit les baies
     box: new Box3(),
     inspect: null, // l'objet examiné
     shown: null, // le dernier examiné, gardé le temps que la caméra revienne
@@ -699,21 +703,24 @@ export default function Apartment({ reducedMotion = false, day }) {
       }
 
       const plants = rooms.map((r) => findMesh(r.object, PLANTS)).filter(Boolean).map((m) => pivotAt(m, "base"))
-      // Les globes gris deviennent des Terres qui tournent
-      const earthMap = earthTexture(), clouds = cloudTexture()
+      // Les globes gris deviennent le cube violet (chambre) et la boule de cristal à quatre étoiles (bureau)
+      const relics = []
       const globes = rooms
         .map((r) => [r.object, findMesh(r.object, GLOBE)])
         .filter(([, m]) => m)
         .map(([room, m]) => {
           const box = new Box3().setFromObject(m)
           const size = box.getSize(new Vector3())
-          const earth = makeEarth(Math.min(size.x, size.y, size.z) / 2, earthMap, clouds)
-          earth.root.position.copy(box.getCenter(new Vector3()))
-          earth.root.updateMatrixWorld(true)
-          room.attach(earth.root)
-          earth.spinner.userData.action = { type: "globe" }
+          const radius = Math.min(size.x, size.y, size.z) / 2
+          const relic = room === chambre ? makeGlowCube(radius * 1.25) : makeStarBall(radius)
+          relic.root.position.copy(box.getCenter(new Vector3()))
+          if (room === chambre) relic.root.position.y += radius * 0.25 // posé sur sa pointe, il flotte juste au-dessus de l'étagère
+          relic.root.updateMatrixWorld(true)
+          room.attach(relic.root)
+          relic.spinner.traverse((c) => (c.userData.action = { type: "globe" }))
+          relics.push(relic)
           m.visible = false
-          return earth.spinner
+          return relic.spinner
         })
 
       // Ce qui mène ailleurs : s'illumine au survol (la texture elle-même brille)
@@ -745,7 +752,7 @@ export default function Apartment({ reducedMotion = false, day }) {
       chambre.attach(lego.root)
 
       // Décor ajouté : guirlande au-dessus de la fenêtre de la chambre, horloge en classe, sac, eau et banane, switch
-      const decor = []
+      const decor = [...relics]
       const windowMesh = findMesh(chambre, WINDOW)
       if (windowMesh) {
         const w = wallFrame(windowMesh, rooms[0].sphere.center)
@@ -878,22 +885,25 @@ export default function Apartment({ reducedMotion = false, day }) {
         const headset = makeHeadset()
         place(chambre, m0, headset.root, HEADSET, m0.deskTop)
         decor.push(headset)
-        inspectable(headset.root, "Le casque")
         const lava = makeLavaLamp(m0.scale)
         place(chambre, m0, lava.root, LAVA_LAMP, m0.deskTop)
         decor.push(lava)
-        inspectable(lava.root, "La lampe à lave")
       }
       if (m1) {
         const notebook = makeNotebook()
         place(classe, m1, notebook.root, NOTEBOOK, m1.deskTop + NOTEBOOK.lift * m1.scale)
         notebook.root.scale.multiplyScalar(NOTEBOOK.size)
         decor.push(notebook)
+        // La petite baie réseau, entre les deux écrans
+        const netSwitch = makeSwitch()
+        const between = m1.screens.clone().sub(m1.center).setY(0)
+        place(classe, m1, netSwitch.root, { ahead: between.dot(m1.facing) / m1.scale, aside: between.dot(m1.side) / m1.scale }, m1.deskTop)
+        decor.push(netSwitch)
+        inspectable(netSwitch.root, "La baie réseau", mix([m1.facing, -1], [WORLD_UP, 0.35]), { margin: 1 })
         inspectable(notebook.root, "Le cahier", mix([WORLD_UP, 1], [m1.facing, -0.3]), { margin: 0.8, blend: 0 })
         const backpack = makeBackpack()
         place(classe, m1, backpack.root, BACKPACK, m1.floor)
         decor.push(backpack)
-        inspectable(backpack.root, "Le sac", mix([m1.facing, -0.8], [WORLD_UP, 0.5]))
       }
       if (m2) {
         const water = makeWaterBottle()
@@ -901,12 +911,21 @@ export default function Apartment({ reducedMotion = false, day }) {
         const banana = makeBanana()
         place(bureau, m2, banana.root, BANANA, m2.deskTop)
         banana.root.rotateY(0.6)
-        const netSwitch = makeSwitch()
-        place(bureau, m2, netSwitch.root, SWITCH, m2.deskTop)
-        decor.push(water, banana, netSwitch)
-        inspectable(water.root, "Ma bouteille d'eau", mix([m2.facing, -0.8], [WORLD_UP, 0.4]))
+        decor.push(water, banana)
         inspectable(banana.root, "Ma banane", mix([m2.facing, -0.6], [WORLD_UP, 0.8]))
-        inspectable(netSwitch.root, "Le switch", mix([m2.facing, -0.7], [WORLD_UP, 0.7]))
+      }
+      // La fenêtre du bureau ouvre sur la salle serveurs : des portes vitrées qui s'éclaircissent au survol
+      let vault = null
+      const serverWindow = findMesh(bureau, SERVER_WINDOW)
+      if (serverWindow && m2) {
+        const w = wallFrame(serverWindow, rooms[2].sphere.center)
+        vault = makeServerRoom(w.width, w.height, m2.scale, findMesh(bureau, BUREAU_WALLS)?.material)
+        vault.root.position.copy(w.center).addScaledVector(WORLD_UP, -w.height / 2)
+        vault.root.lookAt(vault.root.position.clone().add(w.normal))
+        vault.root.updateMatrixWorld(true)
+        bureau.attach(vault.root)
+        decor.push(vault)
+        inspectable(vault.glass, "La salle serveurs", w.normal, { hide: 2, margin: 0.8, blend: 0 })
       }
       // Les écrans : on cache le personnage, assis devant
       rooms.forEach((r, k) => {
@@ -918,7 +937,7 @@ export default function Apartment({ reducedMotion = false, day }) {
         })
       })
 
-      scene.userData.world = { rooms, people, screens, bedside, plants, globes, banner, logo, lego, decor, overview: sphereOf(scene) }
+      scene.userData.world = { rooms, people, screens, bedside, plants, globes, banner, logo, lego, decor, vault, overview: sphereOf(scene) }
     }
 
     const { rooms, overview } = scene.userData.world
@@ -971,6 +990,18 @@ export default function Apartment({ reducedMotion = false, day }) {
     if (action) {
       s.shown = action
       s.inspectOffset = scroll.offset
+      // Cadrage mesuré une seule fois, dans le repère de la pièce : il suit son flottement sans trembler
+      const box = new Box3()
+      for (const target of action.object) box.expandByObject(target)
+      let room = action.object[0]
+      while (room && !world.rooms.some((r) => r.object === room)) room = room.parent
+      const toRoom = (v) => (room ? room.worldToLocal(v) : v)
+      s.frameOf = {
+        room,
+        center: toRoom(box.getCenter(new Vector3())),
+        bottom: toRoom(box.getCenter(new Vector3()).setY(box.min.y)),
+        radius: box.getSize(new Vector3()).length() / 2,
+      }
     }
     setInspecting(!!action)
   }
@@ -1064,11 +1095,12 @@ export default function Apartment({ reducedMotion = false, day }) {
     if (s.inspect && Math.abs(scroll.offset - s.inspectOffset) > 0.01) inspect(null)
     s.zoom = reducedMotion ? (s.inspect ? 1 : 0) : MathUtils.damp(s.zoom, s.inspect ? 1 : 0, INSPECT.speed, delta)
     scroll.inspect = s.zoom // les cartes de texte s'effacent (voir Overlay)
-    if (s.zoom > 0.001 && s.shown) {
-      s.box.makeEmpty()
-      for (const target of s.shown.object) s.box.expandByObject(target)
-      s.box.getCenter(s.focus)
-      const radius = s.box.getSize(s.eye).length() / 2
+    const framed = s.frameOf
+    if (framed?.room) framed.room.updateMatrixWorld() // la pièce vient de bouger : sa position de cette image
+    const fromRoom = (local, out) => (framed.room ? framed.room.localToWorld(out.copy(local)) : out.copy(local))
+    if (s.zoom > 0.001 && s.shown && framed) {
+      fromRoom(framed.center, s.focus)
+      const radius = framed.radius
       const dir = s.shown.normal ? s.eye.copy(s.shown.normal).lerp(s.axes.view, s.shown.blend).normalize() : s.eye.copy(s.axes.view)
       const fit = Math.min(MathUtils.degToRad(camera.fov), 2 * Math.atan(Math.tan(MathUtils.degToRad(camera.fov) / 2) * camera.aspect))
       const distance = (radius / Math.sin(fit / 2)) * s.shown.margin
@@ -1124,12 +1156,7 @@ export default function Apartment({ reducedMotion = false, day }) {
       s.box.getCenter(labelAnchor.current.position)
       labelAnchor.current.position.y = s.box.max.y
     }
-    if (inspecting && hintAnchor.current && s.shown) {
-      s.box.makeEmpty()
-      for (const target of s.shown.object) s.box.expandByObject(target)
-      s.box.getCenter(hintAnchor.current.position)
-      hintAnchor.current.position.y = s.box.min.y
-    }
+    if (inspecting && hintAnchor.current && framed) fromRoom(framed.bottom, hintAnchor.current.position)
 
     // Décor : plantes, globes, bannière, écrans, lampe de chevet, poussière
     world.plants.forEach((p, k) => {
@@ -1140,11 +1167,18 @@ export default function Apartment({ reducedMotion = false, day }) {
     if (!reducedMotion) world.globes.forEach((g) => (g.rotation.y += delta * (0.25 + s.globeSpin * 8)))
     if (world.banner) {
       // Au survol, la bannière ondule davantage, comme soulevée par un courant d'air
+      // La phase avance à sa propre vitesse : changer la vitesse ne la fait pas sauter
       const sway = 1 + s.glow.banner * 1.5
-      world.banner.rotation.x = -(0.5 + 0.5 * Math.sin(time * (0.7 + s.glow.banner))) * 0.08 * sway
+      if (!reducedMotion) s.bannerPhase += delta * (0.7 + s.glow.banner)
+      world.banner.rotation.x = -(0.5 + 0.5 * Math.sin(s.bannerPhase)) * 0.08 * sway
       world.banner.rotation.z = Math.sin(time * 0.45) * 0.015 * sway
     }
     world.decor.forEach((d) => d.animate(time, night))
+    if (world.vault) {
+      const action = world.vault.glass.userData.action
+      s.vaultOpen = MathUtils.damp(s.vaultOpen, s.hover === action || s.inspect === action ? 1 : 0, 5, delta)
+      world.vault.open(s.vaultOpen)
+    }
     drawScreens(world.screens, time, now)
     for (const screen of world.screens) screen.material.color.setScalar(0.8 + 0.2 * night)
     if (world.bedside) {
