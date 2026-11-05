@@ -327,3 +327,117 @@ export function drawScreens(screens, time, now) {
     s.texture.needsUpdate = true
   }
 }
+
+// --- L'écran mural du bureau : en veille avec le logo d'Ecritel, puis la supervision du NOC ---
+
+const WALL = { w: 960, h: 540 }
+
+// La supervision : l'état des équipements, le trafic, les dernières alertes
+function supervision(g, t) {
+  const { w, h } = WALL
+  g.fillStyle = "#0b1020"
+  g.fillRect(0, 0, w, h)
+  g.fillStyle = "#ecebff"
+  g.font = "bold 30px ui-monospace, Consolas, monospace"
+  g.fillText("NOC · Supervision", 30, 50)
+  const clock = new Date().toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" })
+  g.textAlign = "right"
+  g.fillText(clock, w - 30, 50)
+  g.textAlign = "left"
+  // Quatre tuiles d'état
+  const tiles = [["Firewalls", "24 / 24", "#2fb35a"], ["Sessions BGP", "12 / 12", "#2fb35a"], ["Liens", "47 / 48", "#e8a020"], ["VPN", "31 actifs", "#2fb35a"]]
+  tiles.forEach(([name, value, color], k) => {
+    const x = 30 + k * 228
+    g.fillStyle = "#151c34"
+    g.fillRect(x, 80, 210, 110)
+    g.fillStyle = color
+    g.fillRect(x, 80, 8, 110)
+    g.fillStyle = "#9aa3b5"
+    g.font = "20px ui-monospace, Consolas, monospace"
+    g.fillText(name, x + 24, 115)
+    g.fillStyle = "#ffffff"
+    g.font = "bold 34px ui-monospace, Consolas, monospace"
+    g.fillText(value, x + 24, 165)
+  })
+  // Le trafic, en deux courbes qui défilent
+  g.fillStyle = "#151c34"
+  g.fillRect(30, 210, 560, 300)
+  g.fillStyle = "#9aa3b5"
+  g.font = "20px ui-monospace, Consolas, monospace"
+  g.fillText("Trafic (Gb/s)", 50, 245)
+  for (const [color, speed, base] of [["#5aa0ff", 1, 380], ["#ff7ad0", 1.6, 430]]) {
+    g.strokeStyle = color
+    g.lineWidth = 3
+    g.beginPath()
+    for (let x = 0; x <= 520; x += 8) {
+      const y = base - 50 * Math.sin((x + t * 60 * speed) * 0.02) - 25 * Math.sin((x + t * 90) * 0.051)
+      x ? g.lineTo(50 + x, y) : g.moveTo(50 + x, y)
+    }
+    g.stroke()
+  }
+  // Les dernières alertes, une ligne surlignée qui descend
+  g.fillStyle = "#151c34"
+  g.fillRect(610, 210, 320, 300)
+  g.fillStyle = "#9aa3b5"
+  g.fillText("Alertes", 630, 245)
+  const alerts = [["OK", "fw-cluster-01 · HA", "#2fb35a"], ["!", "lien NTE-02 · 87 %", "#e8a020"], ["OK", "bgp TRANSIT · up", "#2fb35a"], ["OK", "vpn client-42", "#2fb35a"], ["OK", "backup · 02:00", "#2fb35a"]]
+  const lit = Math.floor(t * 0.7) % alerts.length
+  alerts.forEach(([state, text, color], k) => {
+    const y = 285 + k * 46
+    if (k === lit) {
+      g.fillStyle = "#222b4a"
+      g.fillRect(620, y - 30, 300, 42)
+    }
+    g.fillStyle = color
+    g.font = "bold 20px ui-monospace, Consolas, monospace"
+    g.fillText(state, 635, y)
+    g.fillStyle = "#ecebff"
+    g.font = "19px ui-monospace, Consolas, monospace"
+    g.fillText(text, 680, y)
+  })
+}
+
+// La veille : le logo d'Ecritel sur fond sombre, qui respire doucement
+function standby(g, t, logo) {
+  const { w, h } = WALL
+  g.fillStyle = "#06070c"
+  g.fillRect(0, 0, w, h)
+  // Une image ou une ImageBitmap (celle du modèle 3D) : on prend la taille qu'elle donne
+  const iw = logo?.naturalWidth ?? logo?.width, ih = logo?.naturalHeight ?? logo?.height
+  if (!iw || !ih) return
+  const fit = Math.min((w * 0.6) / iw, (h * 0.6) / ih)
+  const lw = iw * fit, lh = ih * fit
+  g.globalAlpha = 0.75 + Math.sin(t * 1.2) * 0.2
+  g.drawImage(logo, (w - lw) / 2, (h - lh) / 2, lw, lh)
+  g.globalAlpha = 1
+}
+
+// `logo` : l'image de l'affiche d'Ecritel. `draw(time, awake)` : `awake` de 0 (veille) à 1 (supervision), en fondu.
+export function makeWallScreen(logo) {
+  const canvas = document.createElement("canvas")
+  canvas.width = WALL.w
+  canvas.height = WALL.h
+  const texture = new CanvasTexture(canvas)
+  texture.colorSpace = SRGBColorSpace
+  texture.anisotropy = 8
+  const material = new MeshBasicMaterial({ map: texture, toneMapped: false })
+  const g = canvas.getContext("2d")
+  let last = -1
+  return {
+    material,
+    aspect: WALL.w / WALL.h,
+    draw(time, now, awake) {
+      if (last >= 0 && now - last < REFRESH) return
+      last = now
+      standby(g, time, logo)
+      if (awake > 0.01) {
+        g.globalAlpha = awake
+        g.save()
+        supervision(g, time)
+        g.restore()
+        g.globalAlpha = 1
+      }
+      texture.needsUpdate = true
+    },
+  }
+}

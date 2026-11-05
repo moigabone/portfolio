@@ -167,6 +167,5 @@ export const ui = {
     classe: "4e année à l'ESIEA, majeure cybersécurité. Diplôme en 2028 !",
     bureau: "Chez Ecritel, je construis des clusters de firewalls pour les clients.",
   },
-  dog: "Wouf ! Moi, c'est Lego.",
   objects: {}, // les noms des objets sont déjà en français dans la scène
 }

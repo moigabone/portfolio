@@ -155,7 +155,6 @@ export const ui = {
     classe: "4th year at ESIEA, majoring in cybersecurity. Graduating in 2028!",
     bureau: "At Ecritel, I build firewall clusters for our customers.",
   },
-  dog: "Woof! I'm Lego.",
   // The objects' names, written in French in the scene
   objects: {
     "L'horloge": "The clock",
@@ -170,7 +169,10 @@ export const ui = {
     "Ma banane": "My banana",
     "La salle serveurs": "The server room",
     "Voir l'écran": "See the screen",
-    "Le cube": "The cube",
+    "Kevin": "Kevin",
     "La boule de cristal": "The crystal ball",
+    "Ma platine": "My turntable",
+    "Mon badge Ecritel": "My Ecritel badge",
+    "Le modèle OSI": "The OSI model",
   },
 }

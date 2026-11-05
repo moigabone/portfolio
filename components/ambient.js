@@ -77,37 +77,6 @@ export function createAmbient() {
     timers.push(setTimeout(() => chords(i + 1), CHORD_SECONDS * 1000))
   }
 
-  // « Ouaf ! » : une voix qui monte vite puis retombe, passée dans deux résonances de gueule, avec un souffle
-  function bark() {
-    const now = ctx.currentTime
-    for (const [at, pitch] of [[0, 1], [0.28, 0.92]]) {
-      const t = now + at
-      const voice = ctx.createGain()
-      voice.gain.setValueAtTime(0, t)
-      voice.gain.linearRampToValueAtTime(0.5, t + 0.02)
-      voice.gain.setValueAtTime(0.5, t + 0.06)
-      voice.gain.exponentialRampToValueAtTime(0.001, t + 0.2)
-      const osc = ctx.createOscillator()
-      osc.type = "sawtooth"
-      osc.frequency.setValueAtTime(240 * pitch, t)
-      osc.frequency.linearRampToValueAtTime(420 * pitch, t + 0.035)
-      osc.frequency.exponentialRampToValueAtTime(190 * pitch, t + 0.2)
-      osc.connect(voice)
-      osc.start(t)
-      osc.stop(t + 0.22)
-      for (const [freq, q, level] of [[700, 3, 1], [1600, 4, 0.5]]) {
-        const formant = ctx.createBiquadFilter()
-        formant.type = "bandpass"
-        formant.frequency.value = freq * pitch
-        formant.Q.value = q
-        const out = ctx.createGain()
-        out.gain.value = level
-        voice.connect(formant).connect(out).connect(master.gain)
-      }
-      burst(t, { length: 0.12, freq: 1100, q: 0.9, volume: 0.08, decay: 2 })
-    }
-  }
-
   const ambient = {
     start() {
       if (!ctx) {
@@ -136,7 +105,64 @@ export function createAmbient() {
       master.gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.6)
       playing = null
     },
-    bark,
+    bark() {
+      bark(ctx, master.gain, ctx.currentTime)
+    },
   }
   return ambient
+}
+
+// « Ouaf ouaf ! » d'un petit chien : pour chaque aboiement, une voix rauque qui monte d'un coup puis retombe,
+// mêlée à un souffle, avec la résonance de la gueule. Jouée dans `ctx` vers `out`, à partir de `time`.
+export function bark(ctx, out, time) {
+  const noise = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * 0.25), ctx.sampleRate)
+  const data = noise.getChannelData(0)
+  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1
+  for (const [at, pitch] of [[0, 1], [0.24, 0.9]]) {
+    const t = time + at
+    // L'enveloppe : attaque sèche, courte tenue, chute rapide
+    const env = ctx.createGain()
+    env.gain.setValueAtTime(0, t)
+    env.gain.linearRampToValueAtTime(1, t + 0.012)
+    env.gain.setValueAtTime(1, t + 0.05)
+    env.gain.exponentialRampToValueAtTime(0.001, t + 0.17)
+    // La voix : deux dents de scie un peu désaccordées, la hauteur grimpe puis s'effondre
+    for (const detune of [-12, 12]) {
+      const osc = ctx.createOscillator()
+      osc.type = "sawtooth"
+      osc.detune.value = detune
+      osc.frequency.setValueAtTime(420 * pitch, t)
+      osc.frequency.linearRampToValueAtTime(760 * pitch, t + 0.03)
+      osc.frequency.exponentialRampToValueAtTime(330 * pitch, t + 0.17)
+      const level = ctx.createGain()
+      level.gain.value = 0.35
+      osc.connect(level).connect(env)
+      osc.start(t)
+      osc.stop(t + 0.2)
+    }
+    // Le souffle, plus présent au début
+    const breath = ctx.createBufferSource()
+    breath.buffer = noise
+    const hiss = ctx.createBiquadFilter()
+    hiss.type = "bandpass"
+    hiss.frequency.value = 1800 * pitch
+    hiss.Q.value = 0.8
+    const air = ctx.createGain()
+    air.gain.value = 0.5
+    breath.connect(hiss).connect(air).connect(env)
+    breath.start(t)
+    breath.stop(t + 0.2)
+    // La gueule : on renforce le bas-médium, on coupe l'aigu qui sonnerait électronique
+    const mouth = ctx.createBiquadFilter()
+    mouth.type = "peaking"
+    mouth.frequency.value = 1100 * pitch
+    mouth.Q.value = 1.2
+    mouth.gain.value = 9
+    const soft = ctx.createBiquadFilter()
+    soft.type = "lowpass"
+    soft.frequency.value = 3200
+    const volume = ctx.createGain()
+    volume.gain.value = 0.55
+    env.connect(mouth).connect(soft).connect(volume).connect(out)
+  }
 }

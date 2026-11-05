@@ -1,9 +1,9 @@
-import { CapsuleGeometry, ConeGeometry, CylinderGeometry, Group, Mesh, MeshStandardMaterial, SphereGeometry, TorusGeometry } from "three"
+import { CapsuleGeometry, ConeGeometry, CylinderGeometry, ExtrudeGeometry, Group, Mesh, MeshStandardMaterial, Shape, SphereGeometry } from "three"
 
 // Lego, mon Jack Russell : tout blanc, une seule tache feu autour de l'œil gauche.
-// Il est couché dans son panier, les pattes avant allongées. En mètres, l'origine au sol au centre du panier, la tête vers +x.
+// Il est couché dans son panier carré aux angles arrondis, tout vert, les pattes avant allongées. En mètres, l'origine au sol au centre du panier, la tête vers +x.
 
-const COLORS = { white: "#f7f4ec", tan: "#c17a3a", dark: "#1a1412", pink: "#d98a8a", basket: "#8a5a2b", cushion: "#2e3a7a" }
+const COLORS = { white: "#f7f4ec", tan: "#c17a3a", dark: "#1a1412", pink: "#d98a8a", basket: "#4f8a3c", cushion: "#6fb35a" }
 
 function ball(material, [x, y, z], [sx, sy, sz], r = 1) {
   const mesh = new Mesh(new SphereGeometry(r, 18, 14), material)
@@ -20,21 +20,47 @@ function capsule(material, radius, length, [x, y, z]) {
   return mesh
 }
 
+// Un carré de côté `size` aux coins arrondis de rayon `r`, centré
+function roundedSquare(size, r) {
+  const shape = new Shape()
+  const h = size / 2
+  shape.moveTo(-h + r, -h)
+  shape.lineTo(h - r, -h)
+  shape.quadraticCurveTo(h, -h, h, -h + r)
+  shape.lineTo(h, h - r)
+  shape.quadraticCurveTo(h, h, h - r, h)
+  shape.lineTo(-h + r, h)
+  shape.quadraticCurveTo(-h, h, -h, h - r)
+  shape.lineTo(-h, -h + r)
+  shape.quadraticCurveTo(-h, -h, -h + r, -h)
+  return shape
+}
+
+// Une forme extrudée vers le haut, aux arêtes adoucies : posée au sol, de hauteur `height + 2 * bevel`
+function flat(shape, height, bevel, material) {
+  const geometry = new ExtrudeGeometry(shape, { depth: height, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel * 0.8, bevelSegments: 4, curveSegments: 8 })
+  const mesh = new Mesh(geometry, material)
+  mesh.rotation.x = -Math.PI / 2
+  mesh.position.y = bevel
+  return mesh
+}
+
 export function makeDog() {
   const m = Object.fromEntries(Object.entries(COLORS).map(([k, color]) => [k, new MeshStandardMaterial({ color, roughness: 0.85 })]))
   const root = new Group()
 
-  // Le panier en osier et son coussin
-  const basket = new Mesh(new TorusGeometry(0.27, 0.05, 10, 28), m.basket)
-  basket.rotation.x = Math.PI / 2
-  basket.position.y = 0.05
-  root.add(basket)
-  const cushion = new Mesh(new CylinderGeometry(0.26, 0.26, 0.04, 28), m.cushion)
-  cushion.position.y = 0.02
+  // Le panier carré aux angles arrondis, tout vert : un rebord rembourré, le fond et un coussin bombé
+  const S = 0.64, rim = 0.05
+  const ring = roundedSquare(S, 0.13)
+  ring.holes.push(roundedSquare(S - 2 * rim, 0.07))
+  root.add(flat(ring, 0.035, 0.02, m.basket))
+  root.add(flat(roundedSquare(S - rim, 0.1), 0.01, 0.01, m.basket))
+  const cushion = flat(roundedSquare(S - 2 * rim, 0.07), 0.015, 0.02, m.cushion)
+  cushion.position.y = 0.012
   root.add(cushion)
 
   const dog = new Group()
-  dog.position.set(-0.03, 0.04, 0)
+  dog.position.set(-0.06, 0.06, 0)
   root.add(dog)
 
   // Corps fin et allongé, poitrail un peu relevé

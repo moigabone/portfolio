@@ -28,8 +28,8 @@ Tout le texte du site se trouve dans [`content/portfolio.js`](content/portfolio.
 | `components/Apartment.jsx` | Modèle 3D, caméra qui cadre chaque pièce, mouvement des étages, décor animé, clics (réglages en haut du fichier) |
 | `components/Person.js` | Le personnage d'après mon Bitmoji et ses gestes (frappe, regard caméra, coucou) |
 | `components/Dog.js` | Lego, mon chien, dans son panier |
-| `components/Decor.js` | Décor ajouté : cube violet et boule de cristal à 4 étoiles, salle serveurs du bureau (deux baies 42U derrière des portes vitrées), guirlande, horloge à l'heure de Paris, sac, bouteille d'eau et banane, baie réseau (brassage, switch, NAS), lampe à lave, formules de Fourier, tranches des livres, PC gamer et casque RGB, PC de l'école, cahier |
-| `components/Screens.js` | Les écrans vivants : terminal, règles de firewall, mes sites (`public/screens/`), slides |
+| `components/Decor.js` | Décor ajouté : cube violet et boule de cristal à 4 étoiles, salle serveurs du bureau (deux baies 42U derrière des portes vitrées), guirlande, horloge à l'heure de Paris, sac, bouteille d'eau et banane, baie réseau (brassage, switch, NAS), lampe à lave, formules de Fourier, tranches des livres, PC gamer et casque RGB, PC de l'école, cahier, étagère de chevet chromée (chaussures, platine vinyle), commode en bois, vitres en pixels, modèle OSI en classe, fontaine à eau |
+| `components/Screens.js` | Les écrans vivants : terminal, règles de firewall, mes sites (`public/screens/`, cliquables), slides, et l'écran mural du bureau (logo en veille, supervision) |
 | `components/Elevator.jsx` | Le panneau d'ascenseur pour aller d'un étage à l'autre |
 | `components/Controls.jsx`, `ambient.js`, `theme.js` | Compteur d'objets découverts, interrupteurs soleil / lune (heure de Paris par défaut) et FR / EN, ambiance sonore générée (fond propre à chaque pièce, aboiement de Lego) |
 | `components/Overlay.jsx` | Fondu des cartes selon la position du scroll |
