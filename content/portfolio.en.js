@@ -17,7 +17,7 @@ export const profile = {
 export const projects = {
   eyebrow: "Ground floor · The bedroom",
   title: "Side projects",
-  subtitle: "Where my evening projects come to life, designed and shipped with Claude Code.",
+  subtitle: "Where my evening projects come to life: this is where I try out new tech.",
   items: [
     {
       title: "3D portfolio",

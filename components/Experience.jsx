@@ -2,7 +2,7 @@
 import { Suspense, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { Canvas, useFrame, useThree } from "@react-three/fiber"
-import { Environment, Lightformer, ScrollControls, Stars } from "@react-three/drei"
+import { Environment, Lightformer, PerformanceMonitor, ScrollControls, Stars } from "@react-three/drei"
 import { Color, MathUtils, NeutralToneMapping, Vector3 } from "three"
 import Apartment from "./Apartment"
 import DaySky from "./DaySky"
@@ -14,6 +14,7 @@ import { Discoveries, LanguageToggle, SceneDescription, SoundToggle, ThemeToggle
 import { initLang } from "@/content/i18n"
 import { NB_SECTIONS } from "./Sections"
 import { DAYLIGHT_SPEED, parisIsDay, saveTheme, savedTheme } from "./theme"
+import { QUALITY } from "./quality"
 
 function hasWebGL() {
   try {
@@ -55,8 +56,8 @@ function Lights({ day, reducedMotion }) {
       <hemisphereLight ref={hemi} />
       <directionalLight
         ref={sun}
-        castShadow
-        shadow-mapSize={[2048, 2048]}
+        castShadow={QUALITY.shadows > 0}
+        shadow-mapSize={[QUALITY.shadows || 512, QUALITY.shadows || 512]}
         shadow-bias={-0.0004}
         shadow-normalBias={0.04}
         shadow-camera-near={1}
@@ -73,10 +74,37 @@ function Lights({ day, reducedMotion }) {
         <Lightformer form="rect" intensity={1} color="#c9ceff" position={[0, 12, 0]} rotation-x={Math.PI / 2} scale={[12, 12, 1]} />
       </Environment>
       <group ref={stars}>
-        <Stars radius={60} depth={40} count={2500} factor={3} saturation={0} fade speed={reducedMotion ? 0 : 0.4} />
+        <Stars radius={60} depth={40} count={QUALITY.stars} factor={3} saturation={0} fade speed={reducedMotion ? 0 : 0.4} />
       </group>
       <DaySky day={day} reducedMotion={reducedMotion} />
     </>
+  )
+}
+
+// Si l'image rame, la résolution baisse (et remonte si ça va mieux), entre les bornes de QUALITY.dpr.
+// Sans ombres recalculées à chaque image (téléphones), elles le sont quelques fois par seconde : le soleil et
+// les personnages bougent peu.
+const SHADOW_REFRESH = 0.4 // secondes
+function AdaptiveQuality() {
+  const { gl, setDpr } = useThree()
+  const since = useRef(0)
+  useEffect(() => {
+    gl.shadowMap.autoUpdate = QUALITY.liveShadows
+  }, [gl])
+  useFrame((_, delta) => {
+    if (QUALITY.liveShadows || !QUALITY.shadows) return
+    since.current += delta
+    if (since.current < SHADOW_REFRESH) return
+    since.current = 0
+    gl.shadowMap.needsUpdate = true
+  })
+  const [low, high] = QUALITY.dpr
+  return (
+    <PerformanceMonitor
+      factor={1}
+      onChange={({ factor }) => setDpr(Math.min(window.devicePixelRatio, MathUtils.lerp(low, high, factor)))}
+      onFallback={() => setDpr(low)}
+    />
   )
 }
 
@@ -152,12 +180,13 @@ export default function Experience() {
       <SceneDescription />
       {webgl && (
         <Canvas
-          shadows
-          dpr={[1, 2]}
+          shadows={QUALITY.shadows > 0}
+          dpr={QUALITY.dpr}
           camera={{ fov: 40, near: 0.1, far: 200 }}
-          gl={{ toneMapping: NeutralToneMapping }}
+          gl={{ toneMapping: NeutralToneMapping, antialias: QUALITY.antialias, powerPreference: "high-performance" }}
           onCreated={({ gl }) => (gl.toneMapping = NeutralToneMapping)}
         >
+          <AdaptiveQuality />
           <Lights day={dayRef} reducedMotion={reducedMotion} />
           <ScrollControls pages={NB_SECTIONS} damping={reducedMotion ? 0 : 0.2}>
             <Suspense fallback={null}>

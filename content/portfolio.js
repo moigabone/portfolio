@@ -19,7 +19,7 @@ export const profile = {
 export const projects = {
   eyebrow: "Rez-de-chaussée · La chambre",
   title: "Mes projets perso",
-  subtitle: "Là où naissent les projets du soir, conçus et mis en ligne avec Claude Code.",
+  subtitle: "Là où naissent les projets du soir : j'y expérimente les nouvelles technos.",
   items: [
     {
       title: "Portfolio 3D",

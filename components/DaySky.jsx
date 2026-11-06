@@ -2,8 +2,10 @@
 
 import { useFrame } from "@react-three/fiber"
 import { useMemo, useRef } from "react"
-import { AdditiveBlending, Box3, BoxGeometry, BufferGeometry, CanvasTexture, CapsuleGeometry, CatmullRomCurve3, CircleGeometry, Color, ConeGeometry, CylinderGeometry, DoubleSide, Float32BufferAttribute, Group, MathUtils, Mesh, MeshBasicMaterial, MeshStandardMaterial, PlaneGeometry, Points, PointsMaterial, Raycaster, SRGBColorSpace, SphereGeometry, TubeGeometry, Vector3 } from "three"
+import { AdditiveBlending, Box3, BoxGeometry, BufferGeometry, CanvasTexture, CapsuleGeometry, CatmullRomCurve3, CircleGeometry, Color, ConeGeometry, CylinderGeometry, DoubleSide, Float32BufferAttribute, Group, MathUtils, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D, PlaneGeometry, Points, PointsMaterial, Raycaster, SRGBColorSpace, SphereGeometry, TubeGeometry, Vector3 } from "three"
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js"
 import { sound } from "./ambient"
+import { QUALITY } from "./quality"
 
 // Le ciel du jour : de gros nuages ronds qui dérivent derrière l'immeuble, et quelques oiseaux qui passent.
 // La nuit, la lune se lève à leur place, en haut à gauche. Parfois, un bus volant ou une parade passent (voir FLYERS).
@@ -16,7 +18,7 @@ const MOON = { position: [-5, 5, -48], radius: 3.2 }
 // la nuit, c'est une parade de jouets et d'objets qui défile (clin d'œil à Paprika). En unités du ciel.
 // Chacun entre par le bord gauche de l'écran et ressort entièrement par le bord droit, en `crossing` secondes,
 // une fois toutes les `period` secondes ; `pad` : sa demi-largeur, pour qu'il reste caché au départ et à l'arrivée.
-// Survolé, il joue sa musique (voir CLIPS), qui s'éteint quand le curseur le quitte.
+// Survolé, il joue sa musique (voir CLIPS), qui s'éteint quand le curseur le quitte ; sur écran tactile, touché.
 const FLYERS = {
   bus: { y: 2.6, z: -20, period: 80, crossing: 40, scale: 0.75, pad: 2.5, clip: "bus" },
   parade: { y: 5.5, z: -24, period: 90, crossing: 45, gap: 2.6, scale: 1, pad: 1.5, clip: "paprika" },
@@ -187,23 +189,27 @@ function random(seed) {
   return () => ((s = (s * 16807) % 2147483647) - 1) / 2147483646
 }
 
+// Les boules d'un nuage sont fusionnées en un seul objet : un seul dessin par nuage
 function makeCloud(rand, material, ball) {
-  const cloud = new Group()
+  const parts = []
+  const puff = new Object3D()
+  const add = () => {
+    puff.updateMatrix()
+    parts.push(ball.clone().applyMatrix4(puff.matrix))
+  }
   const puffs = 5 + Math.floor(rand() * 4)
   for (let k = 0; k < puffs; k++) {
     const t = puffs === 1 ? 0 : k / (puffs - 1) - 0.5 // de -0.5 à 0.5 le long du nuage
     const r = 1.1 + (1 - Math.abs(t) * 1.6) * (0.8 + rand() * 0.7) // plus gros au milieu
-    const puff = new Mesh(ball, material)
     puff.position.set(t * 6 + (rand() - 0.5) * 0.8, r * 0.35 + rand() * 0.4, (rand() - 0.5) * 1.5)
     puff.scale.set(r, r * 0.85, r)
-    cloud.add(puff)
+    add()
   }
   // Un dessous plat, comme un vrai cumulus
-  const base = new Mesh(ball, material)
-  base.scale.set(3.4, 0.6, 1.3)
-  base.position.y = 0.3
-  cloud.add(base)
-  return cloud
+  puff.scale.set(3.4, 0.6, 1.3)
+  puff.position.set(0, 0.3, 0)
+  add()
+  return new Mesh(mergeGeometries(parts), material)
 }
 
 // La lune : un disque pâle et ses cratères, dessinés une fois
@@ -242,8 +248,17 @@ function makeBird(material) {
 }
 
 // Où est le curseur : dans la fenêtre, et pas sur une carte de texte ou un bouton (le ciel est derrière eux)
-const cursor = { inside: false, overText: false }
+// Sur écran tactile, pas de survol : un toucher sur l'engin lance sa musique (`tap`, en coordonnées de -1 à 1)
+const cursor = { inside: false, overText: false, tap: null }
 if (typeof window !== "undefined") {
+  window.addEventListener(
+    "pointerup",
+    (e) => {
+      if (e.pointerType === "mouse" || e.target?.closest?.("[data-card], nav, button, a")) return
+      cursor.tap = { x: (e.clientX / window.innerWidth) * 2 - 1, y: 1 - (e.clientY / window.innerHeight) * 2 }
+    },
+    { passive: true },
+  )
   window.addEventListener(
     "pointermove",
     (e) => {
@@ -361,7 +376,7 @@ export default function DaySky({ day, reducedMotion }) {
     }
     // Survolé (et visible), un engin joue sa musique ; quitté, elle s'arrête un peu après
     listen.wait -= delta
-    if (listen.wait <= 0) {
+    if (QUALITY.hover && listen.wait <= 0) {
       listen.wait = HOVER.every
       ray.setFromCamera(state.pointer, state.camera)
       for (const [object, { clip }] of [[sky.bus, FLYERS.bus], [sky.parade.root, FLYERS.parade]]) {
@@ -375,6 +390,12 @@ export default function DaySky({ day, reducedMotion }) {
           listen.playing[clip] = false
         }
       }
+    }
+    if (cursor.tap) {
+      ray.setFromCamera(cursor.tap, state.camera)
+      cursor.tap = null
+      for (const [object, { clip }] of [[sky.bus, FLYERS.bus], [sky.parade.root, FLYERS.parade]])
+        if (object.visible && ray.ray.intersectsBox(hitbox.setFromObject(object).expandByScalar(HOVER.margin))) sound.clip(clip)
     }
     group.current.visible = d > 0.01
     if (!group.current.visible) return

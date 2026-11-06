@@ -30,6 +30,7 @@ import { SECTIONS, NB_SECTIONS } from "./Sections"
 import { SCUBA, animatePerson, makePerson, setOpacity } from "./Person"
 import { DANCE, animateDance, animateDog, makeDog } from "./Dog"
 import { sound } from "./ambient"
+import { QUALITY } from "./quality"
 import { useContent } from "@/content/i18n"
 import {
   BOOKS,
@@ -771,6 +772,7 @@ export default function Apartment({ reducedMotion = false, day }) {
         const object = scene.getObjectByName(name)
         const sphere = sphereOf(object)
         const lamp = new PointLight(LAMP.color, LAMP.intensity, sphere.radius * LAMP.reach, 2)
+        lamp.userData.essential = true // gardée même sur téléphone (voir QUALITY.decorLights)
         lamp.position.copy(sphere.center).add(new Vector3(0, sphere.radius * 0.1, sphere.radius * 0.15))
         object.attach(lamp)
         return { name, object, sphere, lamp, base: object.position.clone(), dust: makeDust(object) }
@@ -804,6 +806,7 @@ export default function Apartment({ reducedMotion = false, day }) {
         chambre.attach(lamp.root)
         shade.visible = stand.visible = false
         const glow = new PointLight("#ff8a3a", 1.5, 2.5, 2)
+        glow.userData.essential = true
         glow.position.copy(lamp.bulb).applyMatrix4(lamp.root.matrixWorld)
         chambre.attach(glow)
         bedside = { material: lamp.glass, light: glow, root: lamp.root, bulb: lamp.bulb }
@@ -1413,6 +1416,9 @@ export default function Apartment({ reducedMotion = false, day }) {
         }
       }
 
+      // Sur téléphone, seules les lumières des pièces et la lampe de chevet restent : chaque lumière alourdit chaque pixel
+      if (!QUALITY.decorLights) scene.traverse((o) => o.isPointLight && !o.userData.essential && (o.visible = false))
+
       scene.userData.world = { rooms, people, screens, bedside, plants, globes, kevin, eggs, vita: vitaGame, banner, wallScreen, lego, decor, vault, zones, overview: sphereOf(scene) }
     }
 
@@ -1727,7 +1733,7 @@ export default function Apartment({ reducedMotion = false, day }) {
     camera.lookAt(s.lookAt)
     // La caméra a bougé sous une souris immobile : on relit ce qu'il y a sous le curseur (étiquette, curseur à jour),
     // quelques fois par seconde seulement
-    if (camera.position.distanceToSquared(s.seenFrom) > 1e-8 && ++s.recheck % HOVER_RECHECK === 0) events.update?.()
+    if (QUALITY.hover && camera.position.distanceToSquared(s.seenFrom) > 1e-8 && ++s.recheck % HOVER_RECHECK === 0) events.update?.()
     s.seenFrom.copy(camera.position)
 
     // Le personnage apparaît dans la pièce visitée ; survolé, il regarde le visiteur ; cliqué, il fait coucou
@@ -1853,8 +1859,9 @@ export default function Apartment({ reducedMotion = false, day }) {
     <>
       <primitive
         object={scene}
-        onPointerMove={onPointerMove}
-        onPointerLeave={onPointerLeave}
+        /* Sans souris (écran tactile), pas de survol : on évite de chercher sous le doigt à chaque glissement */
+        onPointerMove={QUALITY.hover ? onPointerMove : undefined}
+        onPointerLeave={QUALITY.hover ? onPointerLeave : undefined}
         onClick={onClick}
         onPointerMissed={() => state.current.inspect && back()}
       />
