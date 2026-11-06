@@ -1,5 +1,8 @@
 import {
+  AdditiveBlending,
   BackSide,
+  BufferAttribute,
+  BufferGeometry,
   BoxGeometry,
   CapsuleGeometry,
   CanvasTexture,
@@ -17,13 +20,18 @@ import {
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  OctahedronGeometry,
   NearestFilter,
   PlaneGeometry,
   PointLight,
+  Points,
+  PointsMaterial,
   RepeatWrapping,
   Shape,
   SRGBColorSpace,
   SphereGeometry,
+  Sprite,
+  SpriteMaterial,
   TorusGeometry,
   TubeGeometry,
   Vector2,
@@ -1343,7 +1351,184 @@ const SYMBOLS = [
   },
 ]
 
-// En mètres, posée à plat : l'écran vers le haut, le haut de la console vers -z
+// --- Le jeu de la PS Vita : un mineur en pixels court sur des blocs d'herbe et saute les obstacles ---
+
+const RUN = { w: 512, h: 292, px: 8, ground: 232, gravity: 2600, jump: 820, speed: 220, speedUp: 6, best: "portfolio:vita-best" }
+
+// Le mineur, dessiné en gros pixels : casque orange et sa lampe, peau, salopette bleue, bottes. `frame` fait courir les jambes.
+const MINER = [
+  "..oooo..",
+  ".oooooy.",
+  ".ssssss.",
+  ".sksskk.",
+  ".ssssss.",
+  "bbbbbbbb",
+  "sbbbbbbs",
+  ".bbbbbb.",
+  ".bb..bb.",
+  ".dd..dd.",
+]
+const MINER_RUN = [".bb..bb.", "..bbbb..", ".dd..dd.", "..dddd.."] // les deux dernières lignes, en alternance
+const MINER_COLORS = { o: "#f08a24", y: "#fff27a", s: "#e8b48a", k: "#2a1c12", b: "#2a5ac8", d: "#4a3420" }
+
+function readBest() {
+  try {
+    return +(localStorage.getItem(RUN.best) ?? 0) || 0
+  } catch {
+    return 0
+  }
+}
+function saveBest(score) {
+  try {
+    localStorage.setItem(RUN.best, String(score))
+  } catch {}
+}
+
+export function makeRunnerGame() {
+  const canvas = document.createElement("canvas")
+  canvas.width = RUN.w
+  canvas.height = RUN.h
+  const g = canvas.getContext("2d")
+  const texture = new CanvasTexture(canvas)
+  texture.colorSpace = SRGBColorSpace
+  texture.magFilter = NearestFilter
+  const p = RUN.px
+  let state = "ready", y = 0, vy = 0, distance = 0, speed = RUN.speed, obstacles = [], next = 300, best = readBest(), last = null
+  const reset = () => {
+    state = "run"
+    y = vy = distance = 0
+    speed = RUN.speed
+    obstacles = []
+    next = 300
+  }
+  // Un bloc de terre et d'herbe, ou de pierre, de `p * 4` de côté
+  const block = (x, top, kind) => {
+    const s = p * 4
+    if (kind === "grass") {
+      g.fillStyle = "#8a5a2b"
+      g.fillRect(x, top, s, s)
+      g.fillStyle = "#5fae3a"
+      g.fillRect(x, top, s, p)
+      g.fillStyle = "#4f9a30"
+      for (let k = 0; k < 4; k++) if ((k + Math.floor(x / s)) % 2) g.fillRect(x + k * p, top + p, p, p)
+      g.fillStyle = "#6e4520"
+      g.fillRect(x + p, top + p * 2.5, p, p)
+    } else {
+      g.fillStyle = kind === "stone" ? "#8a8f98" : "#a0703a"
+      g.fillRect(x, top, s, s)
+      g.fillStyle = kind === "stone" ? "#6f747d" : "#7a5228"
+      g.fillRect(x + p, top + p, p, p)
+      g.fillRect(x + p * 2.5, top + p * 2.5, p, p)
+      g.strokeStyle = "rgba(0, 0, 0, 0.35)"
+      g.lineWidth = 2
+      g.strokeRect(x + 1, top + 1, s - 2, s - 2)
+    }
+  }
+  const draw = (time) => {
+    const sky = g.createLinearGradient(0, 0, 0, RUN.ground)
+    sky.addColorStop(0, "#6fb8ff")
+    sky.addColorStop(1, "#bfe6ff")
+    g.fillStyle = sky
+    g.fillRect(0, 0, RUN.w, RUN.h)
+    // Le soleil carré et des nuages en blocs, qui défilent lentement
+    g.fillStyle = "#fff2a0"
+    g.fillRect(420, 26, p * 5, p * 5)
+    g.fillStyle = "#ffffff"
+    for (let k = 0; k < 4; k++) {
+      const x = ((k * 160 - distance * 0.2) % (RUN.w + 120) + RUN.w + 120) % (RUN.w + 120) - 60
+      g.fillRect(x, 50 + (k % 2) * 30, p * 8, p * 2)
+      g.fillRect(x + p * 2, 50 + (k % 2) * 30 - p, p * 4, p)
+    }
+    // Des collines de blocs au loin
+    g.fillStyle = "#7fbf5a"
+    for (let k = 0; k < 8; k++) {
+      const x = ((k * 90 - distance * 0.45) % (RUN.w + 90) + RUN.w + 90) % (RUN.w + 90) - 45
+      const hgt = p * (3 + ((k * 7) % 4))
+      g.fillRect(x, RUN.ground - hgt, p * 7, hgt)
+    }
+    // Le sol
+    const s = p * 4
+    for (let x = -((distance % s) + s) % s; x < RUN.w; x += s) {
+      block(x, RUN.ground, "grass")
+      block(x, RUN.ground + s, "dirt")
+    }
+    for (const o of obstacles) for (let k = 0; k < o.height; k++) block(o.x, RUN.ground - s * (k + 1), o.kind)
+    // Le mineur
+    const top = RUN.ground - MINER.length * p - y
+    const legs = state === "run" && y === 0 ? Math.floor(time * 10) % 2 : 0
+    MINER.forEach((row, r) => {
+      const line = r >= MINER.length - 2 ? MINER_RUN[legs * 2 + r - (MINER.length - 2)] : row
+      ;[...line].forEach((c, k) => {
+        if (c === ".") return
+        g.fillStyle = MINER_COLORS[c]
+        g.fillRect(64 + k * p, top + r * p, p, p)
+      })
+    })
+    // Le score et le record
+    g.fillStyle = "rgba(0, 0, 0, 0.45)"
+    g.fillRect(RUN.w - 176, 10, 166, 30)
+    g.fillStyle = "#ffffff"
+    g.font = "bold 18px ui-monospace, Consolas, monospace"
+    g.textAlign = "right"
+    g.fillText(`${String(Math.floor(distance / 10)).padStart(5, "0")}  HI ${String(best).padStart(5, "0")}`, RUN.w - 18, 31)
+    g.textAlign = "center"
+    if (state !== "run") {
+      g.fillStyle = "rgba(0, 0, 0, 0.5)"
+      g.fillRect(0, 100, RUN.w, 74)
+      g.fillStyle = "#ffffff"
+      g.font = "bold 26px ui-monospace, Consolas, monospace"
+      g.fillText(state === "ready" ? "BLOC RUNNER" : "PERDU !", RUN.w / 2, 132)
+      g.font = "16px ui-monospace, Consolas, monospace"
+      g.fillText(state === "ready" ? "Espace ou clic pour jouer" : "Espace ou clic pour rejouer", RUN.w / 2, 158)
+    }
+    g.textAlign = "left"
+    texture.needsUpdate = true
+  }
+  draw(0)
+  return {
+    texture,
+    // Saute, ou lance la partie
+    press() {
+      if (state !== "run") return reset()
+      if (y === 0) vy = RUN.jump
+    },
+    // `playing` : la console est en gros plan. Sinon, le jeu se met en pause sur son écran d'accueil.
+    update(playing) {
+      const now = performance.now() / 1000
+      const dt = last === null ? 0 : Math.min(0.05, now - last)
+      last = now
+      if (!playing) {
+        if (state === "run") state = "ready"
+        return
+      }
+      if (state === "run") {
+        speed += RUN.speedUp * dt
+        distance += speed * dt
+        vy -= RUN.gravity * dt
+        y = Math.max(0, y + vy * dt)
+        if (y === 0) vy = 0
+        next -= speed * dt
+        if (next <= 0) {
+          obstacles.push({ x: RUN.w + 10, height: Math.random() < 0.3 ? 2 : 1, kind: Math.random() < 0.5 ? "stone" : "wood" })
+          next = 220 + Math.random() * 260
+        }
+        for (const o of obstacles) o.x -= speed * dt
+        obstacles = obstacles.filter((o) => o.x > -p * 5)
+        // Touché : le mineur (avec un peu de marge) chevauche un obstacle
+        const hit = obstacles.some((o) => o.x < 64 + 7 * p && o.x + p * 4 > 64 + p && y < o.height * p * 4 - 4)
+        if (hit) {
+          state = "over"
+          const score = Math.floor(distance / 10)
+          if (score > best) saveBest((best = score))
+        }
+      }
+      draw(now)
+    },
+  }
+}
+
+// En mètres, posée à plat : l'écran vers le haut, le haut de la console vers -z.
+// `play(on)` : en gros plan, l'écran passe sur le jeu ; `press()` y saute (voir makeRunnerGame)
 export function makePSVita() {
   const root = new Group()
   const white = new MeshStandardMaterial({ color: "#f4f6f8", roughness: 0.22, metalness: 0.1 })
@@ -1366,7 +1551,9 @@ export function makePSVita() {
   const bezel = new Mesh(new BoxGeometry(0.108, 0.001, 0.066), new MeshStandardMaterial({ color: "#0c0d10", roughness: 0.08, metalness: 0.3 }))
   bezel.position.y = top + 0.0003
   root.add(bezel)
-  const screen = new Mesh(new PlaneGeometry(0.1, 0.057), new MeshBasicMaterial({ map: vitaScreen(), toneMapped: false }))
+  const idle = vitaScreen()
+  const game = makeRunnerGame()
+  const screen = new Mesh(new PlaneGeometry(0.1, 0.057), new MeshBasicMaterial({ map: idle, toneMapped: false }))
   screen.rotation.x = -Math.PI / 2
   screen.position.y = top + 0.0009
   root.add(screen)
@@ -1429,7 +1616,19 @@ export function makePSVita() {
     root.add(trigger)
   }
   root.traverse((c) => c.isMesh && (c.castShadow = true))
-  return { root, animate() {} }
+  return {
+    root,
+    press: () => game.press(),
+    play(on) {
+      game.update(on)
+      const map = on ? game.texture : idle
+      if (screen.material.map !== map) {
+        screen.material.map = map
+        screen.material.needsUpdate = true
+      }
+    },
+    animate() {},
+  }
 }
 
 // --- La lampe champignon orange, en verre, sur la table de nuit ---
@@ -1718,11 +1917,15 @@ function rackFront(name, seed) {
     }
     unit(1, "#0e1014")
   }
-  // Le pare-feu, liseré rouge
+  // Le firewall Stormshield, liseré orange : un membre du cluster HA par baie, l'un actif, l'autre passif
   const fw = unit(2, "#2a2d35")
-  g.fillStyle = "#e0453a"
+  g.fillStyle = "#f08a24"
   g.fillRect(x0, fw + 1, 8, 2 * u - 2)
-  text("FIREWALL · HA", x0 + 18, fw + u * 0.7, 16, "#ffffff")
+  text("SNS · CLUSTER HA", x0 + 18, fw + u * 0.7, 16, "#ffffff")
+  const active = name.endsWith("1")
+  g.fillStyle = active ? "#2fb35a" : "#e8a020"
+  g.fillRect(x0 + 300, fw + 6, 76, 20)
+  text(active ? "ACTIF" : "PASSIF", x0 + 308, fw + 21, 14, "#0b1020")
   ports(fw + u * 0.9, 8, true)
   unit(1, "#0e1014")
   // Les serveurs : tiroirs de disques et voyants
@@ -2275,7 +2478,10 @@ function woodTexture(base, grain) {
   return texture
 }
 
-// `W`, `D`, `H` : largeur, profondeur et hauteur en mètres ; origine au sol au centre, le devant vers +z
+const DRAWER = { ajar: 0.045, open: 0.2 } // en mètres : le tiroir du haut, entrebâillé puis ouvert
+
+// `W`, `D`, `H` : largeur, profondeur et hauteur en mètres ; origine au sol au centre, le devant vers +z.
+// `tray` : le fond du tiroir entrouvert, là où poser ce qu'il contient ; `trayHeight` : la hauteur de ses côtés
 export function makeDrawerChest(W, D, H) {
   const root = new Group()
   const body = new MeshStandardMaterial({ map: woodTexture("#3a2a20", "#22160f"), roughness: 0.6 })
@@ -2294,28 +2500,57 @@ export function makeDrawerChest(W, D, H) {
     leg.position.set(x * (W / 2 - 0.04), legs / 2, z * (D / 2 - 0.04))
     root.add(leg)
   }
-  // Trois façades de tiroir, séparées par une fente, chacune avec sa poignée
+  // Trois façades de tiroir, séparées par une fente, chacune avec sa poignée ; celle du haut est tirée, avec son casier
   const inner = H - legs - 0.025, gap = 0.012, drawer = (inner - gap * 4) / 3
+  const tray = new Group()
+  let top_ = null // le tiroir du haut
   for (let k = 0; k < 3; k++) {
     const y = legs + gap + drawer / 2 + k * (drawer + gap)
+    const slide = new Group()
+    slide.position.z = k === 2 ? DRAWER.ajar : 0
+    if (k === 2) top_ = slide
+    root.add(slide)
     const face = new Mesh(new BoxGeometry(W - 0.05, drawer, 0.015), front)
     face.position.set(0, y, D / 2 - 0.005)
-    root.add(face)
+    slide.add(face)
     const bar = new Mesh(new CylinderGeometry(0.006, 0.006, Math.min(0.14, W * 0.3), 10), brass)
     bar.rotation.z = Math.PI / 2
     bar.position.set(0, y, D / 2 + 0.018)
-    root.add(bar)
+    slide.add(bar)
     for (const side of [-1, 1]) {
       const post = new Mesh(new CylinderGeometry(0.004, 0.004, 0.02, 8), brass)
       post.rotation.x = Math.PI / 2
       post.position.set(side * Math.min(0.06, W * 0.13), y, D / 2 + 0.008)
-      root.add(post)
+      slide.add(post)
     }
+    if (k !== 2) continue
+    // Le casier qui dépasse : un fond, deux côtés, et le fond du tiroir sombre
+    const t = 0.012, bottom = y - drawer / 2 + t, back = D / 2 - 0.013
+    const floor = new Mesh(new BoxGeometry(W - 0.07, t, DRAWER.open), new MeshStandardMaterial({ color: "#2a1d14", roughness: 0.8 }))
+    floor.position.set(0, bottom - t / 2, back - DRAWER.open / 2)
+    slide.add(floor)
+    for (const side of [-1, 1]) {
+      const wall = new Mesh(new BoxGeometry(t, drawer - t, DRAWER.open), body)
+      wall.position.set(side * (W - 0.07 - t) / 2, bottom + (drawer - t) / 2 - t, back - DRAWER.open / 2)
+      slide.add(wall)
+    }
+    tray.position.set(0, bottom, back - DRAWER.open / 2)
+    slide.add(tray)
   }
   root.traverse((child) => {
     if (child.isMesh) child.castShadow = child.receiveShadow = true
   })
-  return { root, animate() {} }
+  return {
+    root,
+    tray,
+    drawer: top_,
+    trayHeight: drawer - 0.012,
+    // `amount` : 0 entrebâillé, 1 grand ouvert
+    open(amount) {
+      top_.position.z = DRAWER.ajar + (DRAWER.open - DRAWER.ajar) * amount
+    },
+    animate() {},
+  }
 }
 
 // --- Le schéma du modèle OSI, affiché dans la classe à la place d'une partie de la fenêtre ---
@@ -2329,6 +2564,15 @@ const OSI = [
   ["2", "Liaison", "Ethernet · VLAN", "#3a52c8"],
   ["1", "Physique", "Câble · Fibre · Wi-Fi", "#7a3ac8"],
 ]
+
+// La mise en page de l'affiche, en part de sa hauteur : sous le titre, une ligne vide reste en haut pour la couche 8
+const OSI_PAGE = { top: 150 / 1024, bottom: 50 / 1024, pad: 0.06 }
+const osiRow = () => (1 - OSI_PAGE.top - OSI_PAGE.bottom) / (OSI.length + 1)
+
+// Où la couche 8 vient se poser sur l'affiche : centre et taille, en part de la largeur (`x`, `width`) et de la hauteur (`y` depuis le haut, `height`)
+export function osiLayer8Frame() {
+  return { x: 0.5, y: OSI_PAGE.top + osiRow() / 2, width: 1 - 2 * OSI_PAGE.pad, height: osiRow() }
+}
 
 // `aspect` : largeur / hauteur de l'affiche
 export function osiTexture(aspect) {
@@ -2345,7 +2589,7 @@ export function osiTexture(aspect) {
   const title = Math.min(70, w * 0.11)
   g.font = `bold ${title}px sans-serif`
   g.fillText("Le modèle OSI", w / 2, 80)
-  const top = 150, row = (h - top - 50) / OSI.length, pad = w * 0.06
+  const row = osiRow() * h, top = OSI_PAGE.top * h + row, pad = w * OSI_PAGE.pad
   OSI.forEach(([n, name, examples, color], k) => {
     const y = top + k * row
     g.fillStyle = color
@@ -2387,7 +2631,7 @@ export function makeWaterCooler() {
     return mesh
   }
   // Le meuble sur quatre petits pieds, un couvercle arrondi sous la bonbonne
-  add(new Mesh(new BoxGeometry(W, H - 0.03, W), white), [0, (H + 0.03) / 2, 0])
+  const cabinet = add(new Mesh(new BoxGeometry(W, H - 0.03, W), white), [0, (H + 0.03) / 2, 0])
   for (const [x, z] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) add(new Mesh(new CylinderGeometry(0.012, 0.012, 0.03, 8), dark), [x * (W / 2 - 0.03), 0.015, z * (W / 2 - 0.03)])
   add(new Mesh(new CylinderGeometry(W * 0.48, W * 0.5, 0.03, 32), white), [0, H + 0.015, 0])
   add(new Mesh(new CylinderGeometry(0.06, 0.07, 0.02, 24), grey), [0, H + 0.04, 0])
@@ -2420,12 +2664,43 @@ export function makeWaterCooler() {
   }
   const water = add(new Mesh(new CylinderGeometry(0.135, 0.135, 0.28, 28), new MeshStandardMaterial({ color: "#3a9ad8", roughness: 0.1, transparent: true, opacity: 0.55, depthWrite: false })), [0, H + 0.23, 0])
   add(new Mesh(new CylinderGeometry(0.152, 0.152, 0.06, 28, 1, true, -0.8, 1.6), new MeshStandardMaterial({ color: "#1d4fa8", roughness: 0.5, side: DoubleSide })), [0, H + 0.38, 0])
-  root.traverse((child) => child.isMesh && (child.castShadow = true))
+  // Les bulles qui remontent dans la bonbonne quand on se sert (« gloup »)
+  const bubbleMaterial = new MeshBasicMaterial({ color: "#e8f8ff", transparent: true, opacity: 0, depthWrite: false })
+  const bubbles = [0.018, 0.012, 0.009, 0.014].map((r, k) => add(new Mesh(new SphereGeometry(r, 12, 10), bubbleMaterial), [(k % 2 ? 1 : -1) * 0.02 * k, H + 0.1, 0.03 - k * 0.015]))
+  // Quand on se sert trop vite, le robinet bleu coule tout seul : la grille déborde, l'eau tombe du bord de la grille
+  // et une flaque s'étale au pied de la fontaine, côté pièce (pas devant : on tomberait du plancher)
+  const spillMaterial = new MeshStandardMaterial({ color: "#8fd0f0", roughness: 0.05, transparent: true, opacity: 0.7, depthWrite: false })
+  const TAP = { x: -0.055, y: H * 0.76 - 0.045, tray: H * 0.6 + 0.01 }
+  const stream = add(new Mesh(new CylinderGeometry(0.005, 0.005, TAP.y - TAP.tray, 8), spillMaterial), [TAP.x, (TAP.y + TAP.tray) / 2, W / 2 + 0.035])
+  const sheet = add(new Mesh(new CylinderGeometry(0.006, 0.009, TAP.tray, 8), spillMaterial), [TAP.x, TAP.tray / 2, W / 2 + 0.075])
+  const PUDDLE = { x: -W * 0.45, z: W / 2 - 0.02, width: 0.32, depth: 0.12 } // une flaque ovale, le long de la façade et vers la gauche
+  const puddle = add(new Mesh(new CircleGeometry(1, 32), spillMaterial), [PUDDLE.x, 0.01, PUDDLE.z])
+  puddle.renderOrder = 2 // par-dessus le sol, sans scintiller
+  puddle.rotation.x = -Math.PI / 2
+  const SPILL = { clicks: 5, window: 3, grow: 0.5, dry: 25 } // 5 clics en 3 secondes ; la flaque grandit, puis sèche
+  let since = -99, clicks = [], flood = 0, last = 0
+  root.traverse((child) => child.isMesh && child.material !== bubbleMaterial && (child.castShadow = true))
   return {
     root,
+    body: cabinet, // l'étiquette se pose sur le meuble, pas sur les bulles qui montent
+    gulp(time) {
+      since = time
+      clicks = clicks.filter((t) => time - t < SPILL.window).concat(time)
+      if (clicks.length >= SPILL.clicks) flood = Math.min(1, flood + SPILL.grow / SPILL.clicks)
+    },
     animate(time) {
       // L'eau de la bonbonne ondule à peine
       water.scale.y = 1 + Math.sin(time * 0.3) * 0.01
+      const t = time - since
+      bubbleMaterial.opacity = t < 2 ? 0.8 * (1 - t / 2) : 0
+      bubbles.forEach((b, k) => (b.position.y = H + 0.1 + Math.max(0, t - k * 0.15) * 0.16))
+      const dt = Math.max(0, time - last)
+      last = time
+      if (t > 2) flood = Math.max(0, flood - dt / SPILL.dry)
+      stream.visible = sheet.visible = flood > 0 && t < 2
+      puddle.visible = flood > 0.01
+      const spread = 0.2 + flood * 0.8
+      puddle.scale.set(PUDDLE.width * spread, PUDDLE.depth * spread, 1)
     },
   }
 }
@@ -2604,4 +2879,439 @@ export function makeBadge(logo) {
   const strap = new Mesh(new TubeGeometry(new CatmullRomCurve3(points, true), 48, 0.003, 4, true), new MeshStandardMaterial({ color: "#3a8a3a", roughness: 0.8 }))
   root.add(strap)
   return { root, animate() {} }
+}
+
+// --- Les easter eggs : de petites références cachées dans les pièces ---
+
+// Un dessin sur canevas, en texture
+function drawn(width, height, paint) {
+  const canvas = document.createElement("canvas")
+  canvas.width = width
+  canvas.height = height
+  paint(canvas.getContext("2d"), width, height)
+  const texture = new CanvasTexture(canvas)
+  texture.colorSpace = SRGBColorSpace
+  texture.anisotropy = 8
+  return texture
+}
+
+// La marque du sacrifice, peinte en petit sur le mur. En mètres, à plat face à +z.
+export function makeBrandMark() {
+  // Le dessin du pendentif (public/textures/berserk.png) : le noir devient le trait, le blanc et le fond s'effacent
+  const MARK = { src: "/textures/berserk.png", height: 0.16, pixels: [474, 808] } // la hauteur en mètres ; la taille de l'image
+  const canvas = document.createElement("canvas")
+  ;[canvas.width, canvas.height] = MARK.pixels // la taille finale dès le départ : la texture ne change pas de dimensions au chargement
+  const map = new CanvasTexture(canvas)
+  map.colorSpace = SRGBColorSpace
+  const image = new Image()
+  image.onload = () => {
+    const g = canvas.getContext("2d")
+    g.drawImage(image, 0, 0, canvas.width, canvas.height)
+    const pixels = g.getImageData(0, 0, canvas.width, canvas.height)
+    const d = pixels.data
+    for (let k = 0; k < d.length; k += 4) {
+      const dark = 255 - (d[k] + d[k + 1] + d[k + 2]) / 3
+      d[k + 3] = Math.min(d[k + 3], dark)
+      d[k] = 20
+      d[k + 1] = 17
+      d[k + 2] = 20
+    }
+    g.putImageData(pixels, 0, 0)
+    map.needsUpdate = true
+  }
+  image.src = MARK.src
+  const mark = new Mesh(new PlaneGeometry((MARK.height * MARK.pixels[0]) / MARK.pixels[1], MARK.height), new MeshStandardMaterial({ map, transparent: true, roughness: 0.8, depthWrite: false }))
+  return { root: mark, animate() {} }
+}
+
+// Une zone de clic invisible autour d'un petit objet : plus facile à viser. `radius` en mètres.
+export function hitArea(radius) {
+  const area = new Mesh(new SphereGeometry(radius, 12, 8), new MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false }))
+  return area
+}
+
+// L'Anneau unique, posé à plat : de l'or, et l'inscription qui rougeoit à peine
+export function makeOneRing() {
+  const root = new Group()
+  const gold = new MeshStandardMaterial({ color: "#e8b24a", roughness: 0.18, metalness: 1, emissive: "#ff5a1a", emissiveIntensity: 0 })
+  const ring = new Mesh(new TorusGeometry(0.011, 0.0028, 12, 36), gold)
+  ring.rotation.x = Math.PI / 2
+  ring.position.y = 0.0028
+  root.add(ring)
+  return {
+    root,
+    animate(time, night) {
+      gold.emissiveIntensity = (0.05 + 0.25 * night) * (0.6 + 0.4 * Math.sin(time * 1.3))
+    },
+  }
+}
+
+// La boîte en carton de Seven, à la place de la poubelle. `W`, `D`, `H` en mètres, le devant vers +z.
+export function makeSevenBox(W, D, H) {
+  const root = new Group()
+  const side = drawn(256, 256, (g, w, h) => {
+    g.fillStyle = "#b98a55"
+    g.fillRect(0, 0, w, h)
+    g.strokeStyle = "rgba(90, 60, 30, 0.35)"
+    g.lineWidth = 2
+    for (let y = 8; y < h; y += 12) {
+      g.beginPath()
+      g.moveTo(0, y)
+      g.lineTo(w, y)
+      g.stroke()
+    }
+    // Les flèches « haut » et l'étiquette d'expédition
+    g.fillStyle = "#3a2a18"
+    for (const x of [40, 72]) {
+      g.fillRect(x - 3, 40, 6, 26)
+      g.beginPath()
+      g.moveTo(x - 10, 44)
+      g.lineTo(x, 30)
+      g.lineTo(x + 10, 44)
+      g.fill()
+    }
+    g.fillStyle = "#f2efe6"
+    g.fillRect(130, 150, 100, 62)
+    g.fillStyle = "#3a3a3a"
+    for (let k = 0; k < 4; k++) g.fillRect(140, 162 + k * 12, 80 - k * 12, 4)
+  })
+  const top = drawn(256, 256, (g, w, h) => {
+    g.fillStyle = "#b98a55"
+    g.fillRect(0, 0, w, h)
+    g.fillStyle = "rgba(60, 40, 20, 0.5)"
+    g.fillRect(0, h / 2 - 1, w, 2)
+    g.fillStyle = "rgba(210, 200, 170, 0.85)" // le scotch
+    g.fillRect(0, h / 2 - 22, w, 44)
+  })
+  const card = new MeshStandardMaterial({ map: side, roughness: 0.9 })
+  const box = new Mesh(new BoxGeometry(W, H, D), [card, card, new MeshStandardMaterial({ map: top, roughness: 0.85 }), card, card, card])
+  box.position.y = H / 2
+  box.castShadow = box.receiveShadow = true
+  root.add(box)
+  return { root, animate() {} }
+}
+
+// La gamelle de Lego, ses croquettes et le diamant qui brille dedans
+export function makeDogBowl() {
+  const root = new Group()
+  const profile = [[0, 0], [0.085, 0], [0.095, 0.01], [0.085, 0.05], [0.07, 0.05], [0.065, 0.012], [0, 0.012]].map(([r, y]) => new Vector2(r, y))
+  const bowl = new Mesh(new LatheGeometry(profile, 32), new MeshStandardMaterial({ color: "#c8352a", roughness: 0.35, metalness: 0.2 }))
+  bowl.castShadow = true
+  root.add(bowl)
+  const kibble = new MeshStandardMaterial({ color: "#8a5a2b", roughness: 0.9 })
+  const rand = seeded(41)
+  for (let k = 0; k < 22; k++) {
+    const a = rand() * Math.PI * 2, d = Math.sqrt(rand()) * 0.055
+    const bit = new Mesh(new SphereGeometry(0.009, 6, 5), kibble)
+    bit.position.set(Math.cos(a) * d, 0.02 + rand() * 0.01, Math.sin(a) * d)
+    root.add(bit)
+  }
+  // Le diamant : une pointe en bas, une table à huit facettes en haut
+  const stone = new MeshStandardMaterial({ color: "#dff6ff", roughness: 0.02, metalness: 0.1, emissive: "#9fe8ff", emissiveIntensity: 0.6, flatShading: true })
+  const diamond = new Group()
+  const crown = new Mesh(new CylinderGeometry(0.012, 0.02, 0.008, 8), stone)
+  crown.position.y = 0.004
+  const pavilion = new Mesh(new ConeGeometry(0.02, 0.022, 8), stone)
+  pavilion.rotation.x = Math.PI
+  pavilion.position.y = -0.011
+  diamond.add(crown, pavilion)
+  diamond.position.set(0.015, 0.042, -0.01)
+  diamond.rotation.set(0.5, 0.3, 0.2)
+  root.add(diamond)
+  return {
+    root,
+    animate(time) {
+      // Un éclat de temps en temps
+      stone.emissiveIntensity = 0.4 + Math.max(0, Math.sin(time * 2.3)) ** 8 * 2.5
+    },
+  }
+}
+
+// Mon téléphone, posé sur le tapis de souris : l'heure sur l'écran de verrouillage le jour, la nuit Samantha appelle
+export function makePhone() {
+  const root = new Group()
+  const body = new Mesh(new BoxGeometry(0.072, 0.008, 0.15), new MeshStandardMaterial({ color: "#1b1d22", roughness: 0.3, metalness: 0.6 }))
+  body.position.y = 0.004
+  root.add(body)
+  const canvas = document.createElement("canvas")
+  canvas.width = 180
+  canvas.height = 380
+  const g = canvas.getContext("2d")
+  const map = new CanvasTexture(canvas)
+  map.colorSpace = SRGBColorSpace
+  const screen = new Mesh(new PlaneGeometry(0.066, 0.142), new MeshBasicMaterial({ map, toneMapped: false }))
+  screen.rotation.x = -Math.PI / 2
+  screen.position.y = 0.0082
+  root.add(screen)
+  let shown = null, painted = -1
+  const paint = (calling, time) => {
+    if (!calling) {
+      // L'écran de verrouillage : un fond dégradé et l'heure de Paris
+      const bg = g.createLinearGradient(0, 0, 0, 380)
+      bg.addColorStop(0, "#2b3a8a")
+      bg.addColorStop(1, "#7a3a8a")
+      g.fillStyle = bg
+      g.fillRect(0, 0, 180, 380)
+      g.fillStyle = "#ffffff"
+      g.textAlign = "center"
+      g.font = "200 52px sans-serif"
+      g.fillText(new Date().toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" }), 90, 110)
+    } else {
+      // L'appel entrant, tout en rouge et rose, et le prénom
+      const bg = g.createLinearGradient(0, 0, 0, 380)
+      bg.addColorStop(0, "#e2563f")
+      bg.addColorStop(1, "#b8282e")
+      g.fillStyle = bg
+      g.fillRect(0, 0, 180, 380)
+      g.fillStyle = "rgba(255, 255, 255, 0.18)"
+      g.beginPath()
+      g.arc(90, 150, 40 + Math.sin(time * 4) * 6, 0, Math.PI * 2)
+      g.fill()
+      g.fillStyle = "#fff4ec"
+      g.textAlign = "center"
+      g.font = "300 30px sans-serif"
+      g.fillText("Samantha", 90, 245)
+      g.font = "16px sans-serif"
+      g.fillText("appel entrant…", 90, 272)
+      g.fillStyle = "#3ccf6a"
+      g.beginPath()
+      g.arc(90, 335, 20, 0, Math.PI * 2)
+      g.fill()
+    }
+    map.needsUpdate = true
+  }
+  return {
+    root,
+    animate(time, night) {
+      const calling = night > 0.5
+      // L'appel pulse : on ne redessine que dans ce cas, quand l'écran change, ou chaque minute pour l'heure
+      const minute = Math.floor(Date.now() / 60000)
+      if (calling || shown !== calling || minute !== painted) paint(calling, time)
+      painted = minute
+      shown = calling
+    },
+  }
+}
+
+// Le verre d'eau et sa feuille, pour le test de Nen. `react(kind, time)` : ce que l'eau fait au clic (voir NEN)
+export const NEN = ["emission", "manipulation", "renforcement"]
+export function makeNenGlass() {
+  const root = new Group()
+  const glass = new Mesh(
+    new CylinderGeometry(0.032, 0.027, 0.09, 24, 1, true),
+    new MeshStandardMaterial({ color: "#dff1fa", roughness: 0.05, transparent: true, opacity: 0.3, side: DoubleSide, depthWrite: false }),
+  )
+  glass.position.y = 0.045
+  root.add(glass)
+  const waterMaterial = new MeshStandardMaterial({ color: "#8fd0f0", roughness: 0.1, transparent: true, opacity: 0.6, depthWrite: false })
+  const water = new Mesh(new CylinderGeometry(0.029, 0.026, 0.07, 24), waterMaterial)
+  water.position.y = 0.036
+  root.add(water)
+  const leaf = new Mesh(new ExtrudeGeometry(snakeLeaf(0.042, 0.02), { depth: 0.001, bevelEnabled: false }), new MeshStandardMaterial({ color: "#5cbf3c", roughness: 0.6, side: DoubleSide }))
+  const pad = new Group()
+  pad.position.y = 0.072
+  leaf.rotation.x = -Math.PI / 2
+  leaf.position.z = 0.021 // centrée dans le verre
+  pad.add(leaf)
+  root.add(pad)
+  const clear = new Color("#8fd0f0"), tinted = new Color("#b05ad8")
+  let kind = null, since = -99
+  return {
+    root,
+    react(next, time) {
+      kind = next
+      since = time
+    },
+    animate(time) {
+      const t = time - since, on = MathUtils.smoothstep(t, 0, 0.6) * (1 - MathUtils.smoothstep(t, 5, 6.5))
+      waterMaterial.color.copy(clear).lerp(tinted, kind === "emission" ? on : 0)
+      pad.rotation.y = kind === "manipulation" ? on * t * 2 : 0
+      const rise = kind === "renforcement" ? on * 0.016 : 0
+      water.scale.y = 1 + rise / 0.07
+      water.position.y = 0.036 + rise / 2
+      pad.position.y = 0.072 + rise
+    },
+  }
+}
+
+// L'holocron, à côté de mes chaussures : un cube aux arêtes dorées, aux faces gravées qui luisent en bleu.
+// `lit` (0 à 1) l'allume et soulève son couvercle.
+export function makeHolocron() {
+  const root = new Group()
+  const S = 0.07
+  const face = drawn(128, 128, (g) => {
+    g.fillStyle = "#0a1a3a"
+    g.fillRect(0, 0, 128, 128)
+    g.strokeStyle = "#7fd4ff"
+    g.lineWidth = 3
+    g.strokeRect(14, 14, 100, 100)
+    g.beginPath()
+    g.arc(64, 64, 26, 0, Math.PI * 2)
+    g.moveTo(64, 14)
+    g.lineTo(64, 38)
+    g.moveTo(64, 90)
+    g.lineTo(64, 114)
+    g.moveTo(14, 64)
+    g.lineTo(38, 64)
+    g.moveTo(90, 64)
+    g.lineTo(114, 64)
+    g.stroke()
+  })
+  const glow = new MeshStandardMaterial({ map: face, emissiveMap: face, emissive: "#ffffff", emissiveIntensity: 0.4, roughness: 0.3 })
+  // Un or vif : peu métallique, sinon il paraît brun sans reflets autour ; un léger éclat propre
+  const gold = new MeshStandardMaterial({ color: "#ffcf3a", emissive: "#8a5a00", emissiveIntensity: 0.35, roughness: 0.28, metalness: 0.35 })
+  const base = new Mesh(new BoxGeometry(S, S * 0.75, S), glow)
+  base.position.y = S * 0.375
+  root.add(base)
+  const lid = new Mesh(new BoxGeometry(S, S * 0.25, S), glow)
+  root.add(lid)
+  // Les coins en or, comme sur le vrai : un bloc à chacun des huit coins
+  for (const x of [-1, 1]) for (const y of [0, 1]) for (const z of [-1, 1]) {
+    const corner = new Mesh(new BoxGeometry(S * 0.22, S * 0.22, S * 0.22), gold)
+    corner.position.set((x * S) / 2, y * S, (z * S) / 2)
+    root.add(corner)
+  }
+  const light = new PointLight("#7fd4ff", 0, 0.6, 2)
+  light.position.y = S
+  root.add(light)
+  return {
+    root,
+    lit: 0,
+    animate(time, night) {
+      const pulse = 0.85 + Math.sin(time * 1.7) * 0.15
+      glow.emissiveIntensity = (0.3 + 0.2 * night + this.lit * 1.2) * pulse
+      light.intensity = (0.1 * night + this.lit * 0.6) * pulse
+      lid.position.y = S * 0.875 + this.lit * S * 0.18
+      lid.rotation.y = this.lit * 0.4
+    },
+  }
+}
+
+// Les six pierres de l'infini, en vrac sur un écrin de velours au fond du tiroir (comme à la TVA, où elles servent de presse-papiers).
+// `height` : celle de l'écrin, pour qu'elles dépassent du tiroir
+export function makeInfinityStones(height) {
+  const root = new Group()
+  const velvet = new Mesh(new BoxGeometry(0.26, height, 0.12), new MeshStandardMaterial({ color: "#3a0f1e", roughness: 1 }))
+  velvet.position.y = height / 2
+  root.add(velvet)
+  const colors = ["#2a6cff", "#ffd23a", "#e0302a", "#9a3aff", "#2fd35a", "#ff8a1a"]
+  const materials = colors.map((color) => new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.8, roughness: 0.1, flatShading: true }))
+  const spots = [[-0.07, 0.02], [-0.03, -0.025], [0.01, 0.025], [0.05, -0.015], [0.085, 0.02], [-0.1, -0.02]]
+  materials.forEach((material, k) => {
+    const stone = new Mesh(new OctahedronGeometry(0.018, 0), material)
+    stone.scale.y = 1.4
+    stone.position.set(spots[k][0], height + 0.014, spots[k][1] * 1.6)
+    stone.rotation.set(k * 0.7, k * 1.1, 1.2)
+    root.add(stone)
+  })
+  // Chaque pierre luit de sa couleur : un halo doux autour d'elle (moins coûteux qu'une lumière par pierre)
+  const soft = drawn(64, 64, (g) => {
+    const glow = g.createRadialGradient(32, 32, 0, 32, 32, 32)
+    glow.addColorStop(0, "rgba(255, 255, 255, 1)")
+    glow.addColorStop(0.35, "rgba(255, 255, 255, 0.35)")
+    glow.addColorStop(1, "rgba(255, 255, 255, 0)")
+    g.fillStyle = glow
+    g.fillRect(0, 0, 64, 64)
+  })
+  const halos = colors.map((color, k) => {
+    const halo = new Sprite(new SpriteMaterial({ map: soft, color, blending: AdditiveBlending, transparent: true, depthWrite: false }))
+    halo.position.set(spots[k][0], height + 0.016, spots[k][1] * 1.6)
+    halo.scale.setScalar(0.07)
+    halo.raycast = () => {} // une lueur, pas un objet : ni les clics ni les rayons de placement ne s'y arrêtent
+    root.add(halo)
+    return halo
+  })
+  return {
+    root,
+    animate(time, night) {
+      materials.forEach((m, k) => {
+        const beat = 0.75 + 0.25 * Math.sin(time * 2 + k)
+        m.emissiveIntensity = (0.8 + 0.6 * night) * beat
+        halos[k].material.opacity = (0.55 + 0.35 * night) * beat
+      })
+    },
+  }
+}
+
+// Un post-it collé : `text` écrit au feutre, sur deux lignes séparées par « / »
+export function makePostIt(text) {
+  const map = drawn(160, 160, (g) => {
+    g.fillStyle = "#ffe866"
+    g.fillRect(0, 0, 160, 160)
+    g.fillStyle = "rgba(0, 0, 0, 0.06)"
+    g.fillRect(0, 0, 160, 26)
+    g.fillStyle = "#1d2a6b"
+    g.textAlign = "center"
+    g.font = "bold 34px 'Comic Sans MS', 'Segoe Print', cursive"
+    text.split("/").forEach((line, k) => g.fillText(line.trim(), 80, 72 + k * 44))
+  })
+  const note = new Mesh(new PlaneGeometry(0.06, 0.06), new MeshStandardMaterial({ map, roughness: 0.8, side: DoubleSide }))
+  note.rotation.z = 0.06
+  return { root: note, animate() {} }
+}
+
+// La couche 8 du modèle OSI, qui vient se poser en haut de l'affiche au survol, dans le même style que les autres
+export function osiLayer8Texture(aspect) {
+  const h = 200, w = Math.round(h * aspect)
+  return drawn(w, h, (g) => {
+    g.fillStyle = "#5a6070"
+    g.fillRect(0, 12, w, h - 24)
+    g.fillStyle = "#ffffff"
+    g.beginPath()
+    g.arc(h * 0.45, h / 2, h * 0.3, 0, Math.PI * 2)
+    g.fill()
+    g.fillStyle = "#5a6070"
+    g.textAlign = "center"
+    g.textBaseline = "middle"
+    g.font = `bold ${h * 0.38}px sans-serif`
+    g.fillText("8", h * 0.45, h / 2 + 2)
+    g.fillStyle = "#ffffff"
+    g.textAlign = "left"
+    g.font = `bold ${Math.min(h * 0.34, w * 0.07)}px sans-serif`
+    g.fillText("Utilisateur", h * 0.95, h * 0.38)
+    g.font = `${Math.min(h * 0.22, w * 0.045)}px sans-serif`
+    g.fillText("Entre la chaise et le clavier", h * 0.95, h * 0.7)
+  })
+}
+
+// Des confettis qui jaillissent puis retombent en tournoyant. `size` : la hauteur du jet, en unités du monde.
+export function makeConfetti(size) {
+  const count = 160
+  const positions = new Float32Array(count * 3), colors = new Float32Array(count * 3)
+  const speeds = [], palette = ["#ffd36a", "#ff7ad0", "#5aa0ff", "#9fe2a0", "#ff8a2a", "#c77dff"].map((c) => new Color(c))
+  const rand = seeded(77)
+  for (let k = 0; k < count; k++) {
+    const a = rand() * Math.PI * 2, r = 0.2 + rand() * 0.5
+    speeds.push([Math.cos(a) * r, 1.4 + rand() * 0.9, Math.sin(a) * r, rand() * 10])
+    palette[k % palette.length].toArray(colors, k * 3)
+  }
+  const geometry = new BufferGeometry()
+  geometry.setAttribute("position", new BufferAttribute(positions, 3))
+  geometry.setAttribute("color", new BufferAttribute(colors, 3))
+  const points = new Points(geometry, new PointsMaterial({ size: size * 0.035, vertexColors: true, transparent: true, depthWrite: false }))
+  points.visible = false
+  points.raycast = () => {} // les confettis ne captent pas les clics
+  let since = -99
+  return {
+    root: points,
+    burst(time) {
+      since = time
+    },
+    animate(time) {
+      const t = time - since
+      points.visible = t >= 0 && t < 4
+      if (!points.visible) return
+      points.material.opacity = 1 - Math.max(0, t - 3)
+      for (let k = 0; k < count; k++) {
+        const [vx, vy, vz, spin] = speeds[k]
+        // Un jet vers le haut, freiné, puis une chute lente qui ondule
+        const fall = Math.min(t, 0.6)
+        const y = (vy * fall - 2.2 * fall * fall) - Math.max(0, t - 0.6) * 0.25
+        positions[k * 3] = (vx * fall + Math.sin(t * 3 + spin) * 0.03) * size
+        positions[k * 3 + 1] = (0.3 + y) * size
+        positions[k * 3 + 2] = (vz * fall + Math.cos(t * 3 + spin) * 0.03) * size
+      }
+      geometry.attributes.position.needsUpdate = true
+    },
+  }
 }

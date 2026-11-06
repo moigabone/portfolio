@@ -106,6 +106,7 @@ html[data-theme="day"] body::after { display: none; }
 /* Bulle du personnage */
 .bubble {
   position: relative;
+  transform: translateY(calc(-50% - 12px)); /* au-dessus de son objet, la pointe dessus */
   max-width: 15rem;
   padding: 0.6rem 0.85rem;
   border: 1px solid var(--color-gilt);
@@ -130,9 +131,8 @@ html[data-theme="day"] body::after { display: none; }
   transform: translateX(-50%) rotate(45deg);
 }
 
-/* Étiquette au survol des objets cliquables (bannière, affiche Ecritel, Lego) */
+/* Étiquette au survol des objets cliquables : sous le curseur (voir Apartment) */
 .hover-label {
-  transform: translateY(-80%);
   padding: 0.3rem 0.6rem;
   border: 1px solid var(--color-gilt);
   background: rgb(10 9 38 / 0.94);
@@ -143,10 +143,16 @@ html[data-theme="day"] body::after { display: none; }
   white-space: nowrap;
   pointer-events: none;
 }
+.hover-label small {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  opacity: 0.8;
+}
 
 /* Pendant l'examen d'un objet : comment revenir, sous l'objet */
 .inspect-hint {
-  transform: translateY(120%);
   color: var(--color-ink);
   font-weight: 500;
 }

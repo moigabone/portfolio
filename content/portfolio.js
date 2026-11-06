@@ -160,12 +160,33 @@ export const ui = {
   allFound: "Tu as tout trouvé, bravo !",
   inspectHint: "Clic ou Échap pour revenir",
   openHint: "Clic pour ouvrir le site · Échap pour revenir",
+  playHint: "Espace ou clic pour sauter · Échap pour revenir",
+  zoneHint: "Clique sur un objet · Échap pour revenir",
+  recordHint: "Clic pour changer de disque · Échap pour revenir",
+  recordTip: "♪ Approche-toi et clique pour changer de musique",
+  labHint: "Clique sur les liens rouges pour les réparer · Échap pour revenir",
   // Ce qui s'affiche au survol des objets et dans les bulles
   labels: { banner: "Mes sites ↗", ecritel: "Mon alternance ↓", dog: "Lego" },
   phrases: {
-    chambre: "Le soir, je code mes propres projets : ce portfolio, le Codex, la Veille…",
+    chambre: "Le soir, je m'amuse à expérimenter : nouvelles technos, IA, 3D… c'est ici que tout commence.",
     classe: "4e année à l'ESIEA, majeure cybersécurité. Diplôme en 2028 !",
     bureau: "Chez Ecritel, je construis des clusters de firewalls pour les clients.",
+  },
+  // Ce que disent les easter eggs quand on clique dessus
+  lines: {
+    muted: "active le son pour l'écouter",
+    allFound: "Tout trouvé ! Lego fête ça 🎉",
+    seven: "What's in the box?!",
+    snatch: "Lego a encore avalé un diamant…",
+    ring: "Mon précieux…",
+    herNight: "Samantha t'appelle…",
+    herDay: "Aucun appel. Samantha rappellera ce soir.",
+    fightclub: "Première règle : on ne parle pas du Fight Club.",
+    holocron: "Seul un Jedi peut l'ouvrir.",
+    tva: "Ici, à la TVA, elles servent de presse-papiers.",
+    "nen-emission": "Émission : l'eau change de couleur !",
+    "nen-manipulation": "Manipulation : la feuille tourne !",
+    "nen-renforcement": "Renforcement : l'eau déborde !",
   },
   objects: {}, // les noms des objets sont déjà en français dans la scène
 }

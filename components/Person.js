@@ -132,7 +132,7 @@ export function makePerson() {
   head.add(hair(m.hair), face(m))
 
   // Bras : manche courte noire, puis le sous-pull blanc jusqu'au poignet.
-  // L'épaule est un pivot (pour faire coucou), le coude aussi (pour taper au clavier).
+  // L'épaule est un pivot (pour faire coucou), le coude aussi (pour taper au clavier), le poignet pour la vague du scuba.
   const arms = []
   for (const side of [-1, 1]) {
     const shoulder = new Group()
@@ -146,9 +146,12 @@ export function makePerson() {
     shoulder.add(forearm)
     const wrist = new Vector3(-side * 0.07, 0.02, 0.27)
     forearm.add(limb(new Vector3(), wrist, 0.044, m.sleeves, 0.04))
-    const hand = part(new SphereGeometry(0.04, 10, 8), m.skin, [wrist.x, wrist.y, wrist.z + 0.04], [1, 0.6, 1.3])
-    forearm.add(hand)
-    arms.push({ side, shoulder, forearm, hand })
+    const joint = new Group()
+    joint.position.copy(wrist)
+    forearm.add(joint)
+    const hand = part(new SphereGeometry(0.04, 10, 8), m.skin, [0, 0, 0.04], [1, 0.6, 1.3])
+    joint.add(hand)
+    arms.push({ side, shoulder, forearm, wrist: joint, hand })
   }
 
   root.traverse((child) => {
@@ -172,11 +175,20 @@ const toCamera = new Vector3()
 
 // Petits gestes en boucle : respiration, frappe au clavier, regard qui se promène, coup d'œil à la caméra.
 // `attention` (survol) et `wave` (clic) vont de 0 à 1 : il regarde le visiteur, et lui fait coucou.
-export function animatePerson({ root, parts }, time, phase, camera, { attention = 0, wave = 0 } = {}) {
+// Le scuba, une danse en 8 temps : main droite qui se pince le nez, bras gauche tendu qui ondule, rebond du buste.
+// Les angles des bras ont été calculés pour que la main droite tombe sur le nez (le buste tourné vers la caméra, la tête droite).
+export const SCUBA = { bpm: 100, beats: 8, loops: 2 }
+const PINCH = { shoulder: [-0.73, 0.587, -1.614], forearm: [-0.586, -0.468, 0.106] } // le bras droit (côté -x)
+const FIN = { shoulder: [-0.588, -0.522, 0.302], forearm: [0.799, 0.285, 0.154] } // le bras gauche, tendu devant, un peu vers le bas
+const easeInOut = (x) => (1 - Math.cos(Math.PI * x)) / 2
+
+// `attention` (survol) et `wave` (clic) vont de 0 à 1 : il regarde le visiteur, et lui fait coucou.
+// `scuba` (0 à 1) le fait danser, `beat` : les secondes depuis le début de la danse.
+export function animatePerson({ root, parts }, time, phase, camera, { attention = 0, wave = 0, scuba = 0, beat = 0 } = {}) {
   const t = time + phase
   const c = time % GLANCE.every
   const cycle = smooth(GLANCE.start, GLANCE.start + GLANCE.ease, c) - smooth(GLANCE.start + GLANCE.hold, GLANCE.start + GLANCE.hold + GLANCE.ease, c)
-  const glance = camera ? Math.max(cycle, attention, wave) : 0
+  const glance = camera ? Math.max(cycle, attention, wave, scuba) : 0
 
   // Direction de la caméra vue depuis la tête, dans le repère du personnage
   let yaw = 0, pitch = 0
@@ -196,14 +208,43 @@ export function animatePerson({ root, parts }, time, phase, camera, { attention 
   const waving = yaw >= 0 ? 1 : -1
   parts.arms.forEach(({ side, shoulder, forearm }, i) => {
     const w = side === waving ? wave : 0
-    shoulder.rotation.x = -0.6 * w
+    shoulder.rotation.set(-0.6 * w, 0, 0)
     shoulder.rotation.z = side * (0.4 + Math.sin(time * 9) * 0.2) * w
-    forearm.rotation.x = parts.reach * (1 - w) + Math.max(0, Math.sin(t * 7 + i * 2.1)) * -0.07 * (1 - glance) - 0.9 * w
+    forearm.rotation.set(parts.reach * (1 - w) + Math.max(0, Math.sin(t * 7 + i * 2.1)) * -0.07 * (1 - glance) - 0.9 * w, 0, 0)
   })
   const idleYaw = Math.sin(t * 0.35) * 0.3 + Math.sin(t * 0.13) * 0.15
   const idlePitch = 0.08 + Math.sin(t * 0.27) * 0.06
   parts.head.rotation.y = idleYaw + (turn - idleYaw) * glance
   parts.head.rotation.x = idlePitch + (Math.max(-0.5, Math.min(0.3, pitch)) - idlePitch) * glance
+  parts.torso.position.y = 0.5
+  parts.arms.forEach(({ wrist }) => wrist.rotation.set(0, 0, 0))
+  if (scuba > 0) dance(parts, scuba, beat, Math.max(-1, Math.min(1, yaw)))
+}
+
+// Le scuba, mêlé à la pose normale selon `amount`. `facing` : l'angle qui tourne le buste vers la caméra.
+function dance(parts, amount, beat, facing) {
+  const beats = (beat * SCUBA.bpm) / 60
+  const k = beats % SCUBA.beats
+  // Le rebond : le buste descend sur chaque temps et remonte entre deux ; sur les 4 derniers, il s'enfonce un peu plus
+  const bounce = easeInOut(1 - Math.abs(((beats % 1) - 0.5) * 2))
+  const sink = k >= 4 ? (Math.floor(k) - 3) * 0.008 : 0
+  const mix = (from, to) => from + (to - from) * amount
+  parts.torso.position.y = mix(0.5, 0.5 - 0.022 * (1 - bounce) - sink)
+  parts.torso.rotation.x = mix(parts.torso.rotation.x, -0.06 + (1 - bounce) * 0.03) // un peu en arrière, décontracté
+  parts.torso.rotation.y = mix(parts.torso.rotation.y, facing)
+  // La tête reste droite face à la caméra, avec un petit hochement sur les temps
+  parts.head.rotation.y = mix(parts.head.rotation.y, 0)
+  parts.head.rotation.x = mix(parts.head.rotation.x, (1 - bounce) * 0.06)
+  const wave = (lag) => Math.sin((beats - lag) * Math.PI * 2)
+  for (const { side, shoulder, forearm, wrist } of parts.arms) {
+    const pose = side < 0 ? PINCH : FIN
+    // La vague part de l'épaule, passe par le coude puis le poignet, avec un léger retard à chaque articulation
+    // (de gauche à droite : autour de l'axe vertical de chaque articulation)
+    const swell = side < 0 ? [0, 0, 0] : [wave(0) * 0.12, wave(0.12) * 0.3, wave(0.24) * 0.6]
+    shoulder.rotation.set(mix(shoulder.rotation.x, pose.shoulder[0]), mix(shoulder.rotation.y, pose.shoulder[1] + swell[0]), mix(shoulder.rotation.z, pose.shoulder[2]))
+    forearm.rotation.set(mix(forearm.rotation.x, pose.forearm[0]), mix(forearm.rotation.y, pose.forearm[1] + swell[1]), mix(forearm.rotation.z, pose.forearm[2]))
+    wrist.rotation.y = swell[2] * amount
+  }
 }
 
 export function setOpacity(person, opacity) {

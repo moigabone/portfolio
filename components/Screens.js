@@ -36,24 +36,27 @@ function mapScreens(mesh, roomCenter) {
     if (normal.dot(roomCenter.clone().sub(center)) < 0) normal.negate()
     const right = new Vector3().crossVectors(UP, normal).normalize()
     const up = new Vector3().crossVectors(normal, right)
-    return { ids, center, right, up }
+    return { ids, center, right, up, normal }
   })
   // De gauche à droite, vu depuis l'intérieur de la pièce
   const axis = panels[0].right
   panels.sort((p, q) => p.center.dot(axis) - q.center.dot(axis))
 
   const uv = new Float32Array(pos.count * 2)
-  panels.forEach(({ ids, center, right, up }, k) => {
+  panels.forEach((panel, k) => {
+    const { ids, center, right, up } = panel
     const u = ids.map((i) => world[i].clone().sub(center).dot(right))
     const v = ids.map((i) => world[i].clone().sub(center).dot(up))
     const [u0, u1, v0, v1] = [Math.min(...u), Math.max(...u), Math.min(...v), Math.max(...v)]
+    panel.width = u1 - u0
+    panel.height = v1 - v0
     ids.forEach((i, j) => {
       uv[i * 2] = (k + (u[j] - u0) / (u1 - u0 || 1)) / panels.length
       uv[i * 2 + 1] = (v[j] - v0) / (v1 - v0 || 1)
     })
   })
   geometry.setAttribute("uv", new BufferAttribute(uv, 2))
-  return panels.length
+  return panels
 }
 
 // --- Contenus ---
@@ -223,37 +226,157 @@ function editor(g, x, t) {
   })
 }
 
-const SLIDES = [
-  ["Le phishing", "Un faux mail, un vrai piège", "#ff7ad0"],
-  ["Les mots de passe", "Longs, uniques, dans un coffre", "#ffd36a"],
-  ["Les fake news", "Vérifier la source avant de partager", "#9fb0ff"],
-  ["Le cyberharcèlement", "En parler, ne pas rester seul", "#9fe2a0"],
-]
-
-function slides(g, x, t) {
-  const [title, subtitle, color] = SLIDES[Math.floor(t / 5) % SLIDES.length]
-  g.fillStyle = "#f6f3ea"
-  g.fillRect(x, 0, W, H)
-  g.fillStyle = color
-  g.fillRect(x, 0, 14, H)
-  g.fillStyle = "#1a1d6a"
-  g.font = "600 13px 'Chakra Petch', sans-serif"
-  g.fillText("ESCAPE GAME · SENSIBILISATION CYBER", x + 34, 40)
-  g.font = "600 30px 'Cormorant Garamond', Georgia, serif"
-  g.fillText(title, x + 34, 100)
-  g.font = "500 17px 'Chakra Petch', sans-serif"
-  g.fillStyle = "#4a4870"
-  g.fillText(subtitle, x + 34, 136)
-  // Cadenas qui se ferme
-  const lock = Math.min(1, (t % 5) / 1.2)
-  g.strokeStyle = color
-  g.lineWidth = 6
-  g.beginPath()
-  g.arc(x + W - 70, 168 - lock * 10, 18, Math.PI, 0)
-  g.stroke()
-  g.fillStyle = color
-  g.fillRect(x + W - 94, 168, 48, 40)
+// Un TP sur Packet Tracer : la topologie du réseau, un paquet qui circule en mode simulation
+const PT_NODES = {
+  R1: [192, 70, "router"],
+  SW1: [100, 130, "switch"],
+  SW2: [284, 130, "switch"],
+  PC0: [50, 195, "pc"],
+  PC1: [150, 195, "pc"],
+  PC2: [234, 195, "pc"],
+  SRV: [334, 195, "server"],
 }
+const PT_LINKS = [["R1", "SW1"], ["R1", "SW2"], ["SW1", "PC0"], ["SW1", "PC1"], ["SW2", "PC2"], ["SW2", "SRV"]]
+const PT_ROUTE = ["PC0", "SW1", "R1", "SW2", "SRV"] // le ping de PC0 vers le serveur
+
+function ptDevice(g, x, y, kind) {
+  if (kind === "router") {
+    g.fillStyle = "#2f7fc1"
+    g.beginPath()
+    g.ellipse(x, y, 22, 12, 0, 0, Math.PI * 2)
+    g.fill()
+    g.strokeStyle = "#ffffff"
+    g.lineWidth = 2
+    for (const [dx, dy] of [[-9, 0], [9, 0], [0, -5], [0, 5]]) {
+      g.beginPath()
+      g.moveTo(x, y)
+      g.lineTo(x + dx, y + dy)
+      g.stroke()
+    }
+  } else if (kind === "switch") {
+    g.fillStyle = "#2f7fc1"
+    g.fillRect(x - 22, y - 9, 44, 18)
+    g.fillStyle = "#ffffff"
+    for (let k = 0; k < 4; k++) g.fillRect(x - 16 + k * 9, y - 2, 5, 4)
+  } else if (kind === "server") {
+    g.fillStyle = "#5a6372"
+    g.fillRect(x - 10, y - 16, 20, 32)
+    g.fillStyle = "#9fe2a0"
+    for (let k = 0; k < 3; k++) g.fillRect(x - 6, y - 11 + k * 9, 12, 3)
+  } else {
+    g.fillStyle = "#3a4250"
+    g.fillRect(x - 13, y - 13, 26, 18)
+    g.fillStyle = "#8fd0ff"
+    g.fillRect(x - 10, y - 10, 20, 12)
+    g.fillStyle = "#3a4250"
+    g.fillRect(x - 4, y + 5, 8, 4)
+    g.fillRect(x - 9, y + 9, 18, 2)
+  }
+}
+
+// Le petit jeu du TP : quelques liens tombent en panne ; on clique dessus pour les réparer, puis le ping passe.
+// Une fois le réseau réparé, un clic relance une nouvelle panne.
+const lab = { down: new Set([1, 4]), fixes: 0, clicks: 0, solvedAt: null }
+function breakLinks() {
+  lab.down = new Set()
+  while (lab.down.size < 2 + Math.floor(Math.random() * 2)) lab.down.add(Math.floor(Math.random() * PT_LINKS.length))
+  lab.clicks = 0
+  lab.solvedAt = null
+}
+// La distance d'un point au segment [a, b]
+function toSegment([px, py], [ax, ay], [bx, by]) {
+  const dx = bx - ax, dy = by - ay
+  const k = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)))
+  return Math.hypot(px - ax - k * dx, py - ay - k * dy)
+}
+// `u`, `v` : le point cliqué sur la dalle, de 0 à 1 depuis le coin en haut à gauche
+export function packetTracerClick(u, v) {
+  if (!lab.down.size) return breakLinks()
+  const at = [u * W, v * H]
+  lab.clicks++
+  const near = PT_LINKS.map(([a, b], k) => [k, toSegment(at, PT_NODES[a], PT_NODES[b])]).filter(([k, d]) => lab.down.has(k) && d < 22)
+  if (!near.length) return
+  lab.down.delete(near.sort((p, q) => p[1] - q[1])[0][0])
+  if (!lab.down.size) lab.solvedAt = performance.now() / 1000
+}
+
+function packetTracer(g, x, t) {
+  g.fillStyle = "#eef2f6"
+  g.fillRect(x, 0, W, H)
+  // La barre de titre et la barre d'outils
+  g.fillStyle = "#1f3b57"
+  g.fillRect(x, 0, W, 22)
+  g.font = "600 12px ui-monospace, Consolas, monospace"
+  g.fillStyle = "#ecf2f8"
+  g.fillText("Packet Tracer — TP_routage.pkt", x + 8, 15)
+  g.fillStyle = "#d5dde6"
+  g.fillRect(x, 22, W, 14)
+  // Les câbles, avec leurs voyants verts aux deux bouts
+  PT_LINKS.forEach(([a, b], k) => {
+    const [ax, ay] = PT_NODES[a], [bx, by] = PT_NODES[b]
+    const down = lab.down.has(k)
+    g.strokeStyle = down ? "#d8322a" : "#1a1a1a"
+    g.lineWidth = down ? 2.5 : 1.5
+    g.setLineDash(down ? [6, 5] : [])
+    g.beginPath()
+    g.moveTo(x + ax, ay)
+    g.lineTo(x + bx, by)
+    g.stroke()
+    g.setLineDash([])
+    if (down) {
+      // Une croix rouge au milieu du lien coupé
+      const mx = x + (ax + bx) / 2, my = (ay + by) / 2
+      g.strokeStyle = "#d8322a"
+      g.lineWidth = 3
+      g.beginPath()
+      g.moveTo(mx - 6, my - 6)
+      g.lineTo(mx + 6, my + 6)
+      g.moveTo(mx + 6, my - 6)
+      g.lineTo(mx - 6, my + 6)
+      g.stroke()
+    }
+    g.fillStyle = down ? "#d8322a" : "#29b34a"
+    for (const f of [0.18, 0.82]) {
+      g.beginPath()
+      g.arc(x + ax + (bx - ax) * f, ay + (by - ay) * f, 2.6, 0, Math.PI * 2)
+      g.fill()
+    }
+  })
+  g.font = "600 11px ui-monospace, Consolas, monospace"
+  for (const [name, [nx, ny, kind]] of Object.entries(PT_NODES)) {
+    ptDevice(g, x + nx, ny, kind)
+    g.fillStyle = "#1f2a36"
+    g.fillText(name, x + nx - 10, ny + (kind === "router" ? -17 : 28))
+  }
+  // Le paquet du ping, une enveloppe qui saute d'équipement en équipement : seulement quand le réseau marche
+  const hops = PT_ROUTE.length - 1
+  const p = (t * 0.6) % (hops + 1)
+  if (p < hops && !lab.down.size) {
+    const k = Math.floor(p), u = p - k, f = u * u * (3 - 2 * u)
+    const [ax, ay] = PT_NODES[PT_ROUTE[k]], [bx, by] = PT_NODES[PT_ROUTE[k + 1]]
+    const ex = x + ax + (bx - ax) * f, ey = ay + (by - ay) * f
+    g.fillStyle = "#f6d34a"
+    g.fillRect(ex - 8, ey - 6, 16, 12)
+    g.strokeStyle = "#8a6d00"
+    g.lineWidth = 1
+    g.strokeRect(ex - 8, ey - 6, 16, 12)
+    g.beginPath()
+    g.moveTo(ex - 8, ey - 6)
+    g.lineTo(ex, ey + 1)
+    g.lineTo(ex + 8, ey - 6)
+    g.stroke()
+  }
+  g.fillStyle = "#4a5866"
+  // L'état du TP, en bas
+  if (lab.down.size) {
+    g.fillStyle = "#d8322a"
+    g.fillText(`Panne : ${lab.down.size} lien${lab.down.size > 1 ? "s" : ""} coupé${lab.down.size > 1 ? "s" : ""} · clique dessus`, x + 8, H - 8)
+  } else {
+    g.fillStyle = "#1f7a3a"
+    g.fillText(lab.solvedAt ? `Ping OK · réparé en ${lab.clicks} clic${lab.clicks > 1 ? "s" : ""} · clic : nouvelle panne` : "Simulation · ICMP PC0 → SRV", x + 8, H - 8)
+  }
+}
+packetTracerClick.painter = packetTracer // pour retrouver la dalle du TP (voir Apartment)
 
 function bastion(g, x, t) {
   g.fillStyle = "#0b1020"
@@ -293,7 +416,7 @@ export function screenContents(images) {
   return {
     bureau: [[monitoring, terminal, firewall]],
     chambre: [[sites(images)], [editor]],
-    classe: [[slides, bastion]],
+    classe: [[packetTracer, bastion]],
   }
 }
 
@@ -304,7 +427,8 @@ export function installScreens(room, roomCenter, contents, material) {
     if (c.isMesh && c.material.name === material) meshes.push(c)
   })
   return meshes.map((mesh, i) => {
-    const panels = mapScreens(mesh, roomCenter)
+    const frames = mapScreens(mesh, roomCenter)
+    const panels = frames.length
     const canvas = document.createElement("canvas")
     canvas.width = W * panels
     canvas.height = H
@@ -313,7 +437,7 @@ export function installScreens(room, roomCenter, contents, material) {
     texture.anisotropy = 4
     mesh.material = new MeshBasicMaterial({ map: texture, toneMapped: false })
     const painters = contents[i] ?? contents[contents.length - 1]
-    return { mesh, canvas, texture, material: mesh.material, panels, painters, last: -1 }
+    return { mesh, canvas, texture, material: mesh.material, panels, frames, painters, last: -1 }
   })
 }
 

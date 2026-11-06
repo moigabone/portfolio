@@ -112,7 +112,9 @@ export function makeDog() {
   root.traverse((child) => {
     if (child.isMesh) child.castShadow = true
   })
-  return { root, dog, body, head, eyes, tail, tongue }
+  const dancer = makeDancer(m, head)
+  root.add(dancer.root)
+  return { root, dog, body, head, eyes, tail, tongue, dancer }
 }
 
 // Endormi, la tête posée sur les pattes ; `awake` (0 à 1) relève la tête, ouvre les yeux, sort la langue et fait remuer la queue.
@@ -130,4 +132,122 @@ export function animateDog(lego, time, awake, look = null) {
   lego.tongue.visible = awake > 0.5
   lego.tail.rotation.z = -1.1 + awake * 0.7
   lego.tail.rotation.x = Math.sin(time * (2 + awake * 16)) * (0.12 + awake * 0.5)
+}
+
+// --- La danse : quand tout est trouvé, Lego se lève sur ses pattes arrière et danse face au visiteur ---
+// Un deuxième Lego, debout et articulé (épaules, coudes, hanches, genoux), qui remplace le Lego couché le temps de la danse.
+// En mètres, dans le même repère que le panier : le poitrail vers +x, sa droite vers +z.
+
+// Calée sur sa musique (public/audio/lego.mp3) : 85 BPM, premier temps fort à 0,67 s, 8,5 s en tout. Un cycle = 4 temps.
+// `wait` : le temps qu'on attend au plus que la musique démarre
+export const DANCE = { bpm: 85, first: 0.67, seconds: 8.5, wait: 1 }
+
+// Un segment de patte qui pend sous son articulation
+function bone(material, radius, length) {
+  const mesh = new Mesh(new CapsuleGeometry(radius, length, 4, 10), material)
+  mesh.position.y = -length / 2
+  return mesh
+}
+
+function makeDancer(m, head) {
+  const root = new Group()
+  root.visible = false
+  // Les hanches portent le buste et les pattes arrière
+  const hips = new Group()
+  hips.position.y = 0.13
+  root.add(hips)
+  const legs = [-1, 1].map((side) => {
+    const hip = new Group()
+    hip.position.set(0, 0, side * 0.04)
+    hips.add(hip)
+    hip.add(ball(m.white, [0, -0.01, 0], [0.04, 0.045, 0.035])) // la cuisse
+    hip.add(bone(m.white, 0.02, 0.05))
+    const knee = new Group()
+    knee.position.y = -0.065
+    hip.add(knee)
+    knee.add(bone(m.white, 0.016, 0.045))
+    knee.add(ball(m.white, [0.015, -0.062, 0], [0.03, 0.012, 0.02])) // la patte, posée à plat
+    return { side, hip, knee }
+  })
+  // Le buste, droit, et son poitrail
+  const torso = new Group()
+  hips.add(torso)
+  const trunk = new Mesh(new CapsuleGeometry(0.058, 0.13, 6, 12), m.white)
+  trunk.position.y = 0.1
+  trunk.scale.z = 0.95
+  torso.add(trunk)
+  torso.add(ball(m.white, [0.03, 0.15, 0], [0.055, 0.065, 0.055]))
+  const arms = [-1, 1].map((side) => {
+    const shoulder = new Group()
+    shoulder.position.set(0.025, 0.17, side * 0.052)
+    torso.add(shoulder)
+    shoulder.add(bone(m.white, 0.017, 0.045))
+    const elbow = new Group()
+    elbow.position.y = -0.06
+    shoulder.add(elbow)
+    elbow.add(bone(m.white, 0.015, 0.04))
+    elbow.add(ball(m.white, [0, -0.06, 0], [0.02, 0.018, 0.019])) // le « poignet » relâché
+    return { side, shoulder, elbow }
+  })
+  // La tête (une copie de celle du Lego couché, les yeux grands ouverts) et la queue qui remue
+  const face = head.clone()
+  face.position.set(0.02, 0.27, 0)
+  torso.add(face)
+  const tail = new Group()
+  tail.position.set(-0.05, 0.02, 0)
+  tail.rotation.z = 0.9
+  hips.add(tail)
+  const stub = new Mesh(new CylinderGeometry(0.01, 0.017, 0.08, 8), m.white)
+  stub.position.y = 0.04
+  tail.add(stub)
+  root.traverse((child) => child.isMesh && (child.castShadow = true))
+  return { root, hips, torso, legs, arms, face, tail }
+}
+
+const easeInOut = (x) => (1 - Math.cos(Math.PI * Math.min(1, Math.max(0, x)))) / 2
+
+// `t` : les secondes depuis le début de la danse. Renvoie false une fois la danse finie.
+export function animateDance(lego, t) {
+  const d = lego.dancer
+  const length = DANCE.seconds
+  const dancing = t >= 0 && t < length
+  d.root.visible = dancing
+  lego.dog.visible = !dancing
+  if (!dancing) return false
+  // Le temps 1 de la chorégraphie tombe sur le premier temps fort de la musique (avant, Lego se lève)
+  const beats = ((t - DANCE.first) * DANCE.bpm) / 60 + 1
+  const frac = beats % 1, n = Math.floor(beats)
+  // Un petit bond pour se lever, au début, et pour se recoucher, à la fin
+  const hop = Math.max(0, Math.sin(Math.min(1, t / 0.35) * Math.PI), Math.sin(Math.min(1, Math.max(0, (t - length + 0.35) / 0.35)) * Math.PI))
+  d.root.position.y = hop * 0.05
+  // Quelques variations d'un cycle à l'autre, pour que la boucle ne paraisse pas mécanique
+  const flair = 1 + 0.12 * Math.sin(Math.floor(beats / 4) * 1.7)
+  // Le balancier : à droite au temps 1, au centre au 2, à gauche au 3, au centre au 4 ; les pattes avant traînent un peu derrière
+  const swing = Math.sin((beats * Math.PI) / 2)
+  const lagged = Math.sin(((beats - 0.15) * Math.PI) / 2) * 1.08
+  // Le rebond : le corps descend sur le temps, remonte entre deux
+  const down = (1 + Math.cos(frac * Math.PI * 2)) / 2
+  d.hips.position.y = 0.13 - down * 0.012
+  d.hips.position.z = -swing * 0.012 // les hanches partent à l'opposé du buste
+  d.torso.rotation.x = swing * 0.14 // le buste penche du côté où partent les pattes
+  // La tête reste droite, impassible, avec un hochement à peine visible
+  d.face.rotation.x = -swing * 0.14
+  d.face.rotation.z = down * 0.05
+  for (const { side, shoulder, elbow } of d.arms) {
+    const out = Math.max(0, lagged * side), across = Math.max(0, -lagged * side), center = 1 - Math.abs(lagged)
+    // Vers l'extérieur presque à l'horizontale, ou en travers du poitrail, ou croisées devant lui au centre
+    shoulder.rotation.x = (-side * 1.35 * out + side * 0.55 * across + side * 0.35 * center) * flair
+    shoulder.rotation.z = 0.55 * across + 0.6 * center + 0.15 * out
+    elbow.rotation.z = 0.25 + 0.5 * center + 0.3 * across
+  }
+  // Le piétinement : un pied se lève à chaque temps ; aux temps 1 et 3, le genou du côté du balancier monte plus haut
+  const lifting = [1, -1, -1, 1][n % 4], high = n % 2 === 0
+  const bump = Math.sin(frac * Math.PI) * (high ? 1 : 0.45) * (n % 8 === 6 ? 1.25 : 1)
+  for (const { side, hip, knee } of d.legs) {
+    const lift = side === lifting ? easeInOut(bump) : 0
+    hip.rotation.z = lift * 0.9
+    knee.rotation.z = -lift * 1.4
+  }
+  d.tail.rotation.x = Math.sin(t * 18) * 0.5
+  return true
 }

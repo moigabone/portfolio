@@ -14,6 +14,7 @@ import {
   Matrix3,
   Matrix4,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   Object3D,
   PlaneGeometry,
@@ -26,8 +27,8 @@ import {
   Vector3,
 } from "three"
 import { SECTIONS, NB_SECTIONS } from "./Sections"
-import { animatePerson, makePerson, setOpacity } from "./Person"
-import { animateDog, makeDog } from "./Dog"
+import { SCUBA, animatePerson, makePerson, setOpacity } from "./Person"
+import { DANCE, animateDance, animateDog, makeDog } from "./Dog"
 import { sound } from "./ambient"
 import { useContent } from "@/content/i18n"
 import {
@@ -35,6 +36,20 @@ import {
   bookTexture,
   fourierTexture,
   makeBackpack,
+  makeBrandMark,
+  makeConfetti,
+  makeDogBowl,
+  makeHolocron,
+  hitArea,
+  makeInfinityStones,
+  makeNenGlass,
+  makeOneRing,
+  makePhone,
+  makePostIt,
+  makeSevenBox,
+  NEN,
+  osiLayer8Frame,
+  osiLayer8Texture,
   makeBadge,
   makeBigPlant,
   makeClock,
@@ -66,7 +81,7 @@ import {
   osiTexture,
   persianRugTexture,
 } from "./Decor"
-import { SITES, drawScreens, installScreens, makeWallScreen, screenContents } from "./Screens"
+import { SITES, drawScreens, installScreens, makeWallScreen, packetTracerClick, screenContents } from "./Screens"
 import { scrollToSection } from "./Elevator"
 import { DAYLIGHT_SPEED } from "./theme"
 
@@ -134,7 +149,7 @@ const DOG = { forward: 0.9, scale: 1, facing: -Math.PI / 2.4, awakeSeconds: 4 }
 
 // Décor ajouté, placé par rapport à la chaise de chaque pièce (en mètres) :
 // `ahead` vers l'écran, `aside` sur le côté du personnage
-const WATER = { ahead: 0.3, aside: -0.62 } // au boulot, de l'eau…
+const WATER = { ahead: 0.66, aside: -0.33 } // au boulot, de l'eau, juste à côté de…
 const BANANA = { ahead: 0.62, aside: -0.45 } // …et une banane
 const SERVER_WINDOW = { room: "bureau", material: "UberTexture", vertices: 1466 } // la fenêtre du bureau : la salle serveurs est derrière
 const BUREAU_WALLS = { material: "Material", vertices: 142 } // les murs du bureau
@@ -192,12 +207,48 @@ const WALL_SCREEN = { delay: 3, hold: 15 } // secondes : l'écran du bureau s'al
 const OFFICE_CABINET = { material: "Matériau.018", vertices: 1762 } // le caisson à droite du bureau, remplacé par la fontaine à eau
 const OFFICE_DESK = { material: "Matériau.017", vertices: 269 } // le bureau du travail
 const COOLER_SPOT = { plant: 0.16, cooler: 0.16, cups: 0.09, gap: 0.03 } // en mètres : les demi-largeurs de la plante et de la fontaine, ses gobelets, l'écart
-const DESK_HEADSET = { ahead: 0.5, aside: 0.62 } // le casque du travail, à gauche du clavier
+const DESK_HEADSET = { ahead: 0.5, aside: 0.62, toward: 0.15 } // le casque du travail, à gauche du clavier, rapproché de la boule de cristal (en mètres)
 const BADGE = { before: 0.2, left: 0.32, size: 1.6 } // mon badge, entre le clavier et l'écran du milieu, un peu à gauche (en mètres)
 const OFFICE_PLANT = [{ material: "Matériau.023", vertices: 206 }, { material: "Matériau.021", vertices: 522 }] // le pot et la terre de sa plante
 const CLASS_WINDOW_KEEP = 0.55 // la fenêtre de la classe garde cette part de sa largeur, côté horloge : le reste accueille le modèle OSI
 const WAVE_SECONDS = 3
-const PICK_DEPTH = 4 // objets les plus proches examinés sous la souris
+const SCUBA_SECONDS = (SCUBA.loops * SCUBA.beats * 60) / SCUBA.bpm // une fois sur trois, un clic sur moi lance le scuba
+// Les easter eggs : où les poser (en mètres, par rapport à la chaise ou à leur meuble) et leur taille
+const SEVEN_BIN = { material: "Matériau.027", vertices: 326 } // la poubelle de la chambre, remplacée par la boîte de Seven…
+const BIN_PAPERS = [{ material: "Matériau.033", vertices: 752 }, { material: "Matériau.033", vertices: 700 }] // …et ses papiers froissés
+const EGGS = {
+  phone: { ahead: 0.36, aside: 0.68, size: 1.4 }, // sur le tapis de souris, loin à gauche du clavier
+  glass: { ahead: 0.4, aside: 0.98, size: 2 }, // devant le casque, à gauche du tapis de souris
+  ring: { right: 0.22, back: 0.1, size: 2, hit: 0.05 }, // à droite de la lampe à lave, en retrait du bord ; `hit` : le rayon de sa zone de clic
+  mark: { aside: 0.2, size: 1.1 }, // sur le mur, à gauche de la fenêtre (en mètres depuis son bord)
+  bowl: { at: [0.85, 0.53], size: 1.3 }, // au sol, devant le tapis, près du bord de la pièce (dans le repère de la chambre)
+  holocron: { along: 0.6, size: 2.6 }, // sur le plateau du bas, à côté des chaussures
+  postIt: { size: 1.4 },
+}
+const PENCIL_SHIFT = { forward: 0.1, right: 0.04 } // le pot à crayons de la chambre, ramené du bord du bureau (loin de l'écran)
+// Les étiquettes à l'écran, en pixels : jamais collées aux bords ; celle du survol sous le curseur, l'aide en bas
+const LABELS = { side: 130, top: 90, bottom: 40, below: 34, hint: 46 }
+// Ce qui gêne la vue en gros plan : `share` de la taille de la pièce au plus, rayons arrêtés à `before` de la distance,
+// visés vers le haut de l'objet à `spread` de son centre ; caché dès que le zoom dépasse `from` ;
+// `touch` : la marge (part de la pièce) en deçà de laquelle un objet touche celui qu'on regarde, et reste
+const OCCLUDER = { share: 0.3, before: 0.92, spread: 0.6, from: 0.3, touch: 0.02 }
+const HOVER_RECHECK = 6 // quand la caméra bouge : une image sur six, on relit ce qu'il y a sous le curseur
+const PICK_DEPTH = 6 // objets les plus proches examinés sous la souris
+// Les regroupements (voir GROUPS) : un clic s'en approche, puis on peut cliquer sur leurs objets.
+// `hide` : le personnage s'efface (il est devant le bureau) ; `margin` : le recul de la caméra
+const ZONE = { margin: 0.95 }
+// Les regroupements de chaque pièce : leur nom, les étiquettes des objets qu'ils rassemblent, et le personnage à cacher
+const GROUPS = {
+  chambre: [
+    { label: "Le bureau", members: ["Voir l'écran", "Mon téléphone", "Un verre d'eau"], hide: 0 },
+    { label: "L'étagère", members: ["Mes lectures", "Mes mangas", "Mes films", "Kevin", "Un savon"] },
+    { label: "La commode", members: ["Le tiroir", "Un anneau"] },
+    { label: "Le meuble à chaussures", members: ["Ma PS Vita", "Ma platine", "Un holocron"] },
+  ],
+  classe: [{ label: "Le poste", members: ["Voir l'écran", "La baie réseau", "Un post-it", "Le cahier"], hide: 1 }],
+  bureau: [{ label: "Le poste", members: ["Voir l'écran", "La boule de cristal", "Ma banane", "Mon badge Ecritel"], hide: 2 }],
+}
+const DRAWER_SECONDS = 6 // le tiroir des pierres reste grand ouvert
 
 // Arrivée : les pièces tombent du ciel l'une après l'autre (secondes, hauteur en rayons de pièce)
 const INTRO = { delay: 0.9, stagger: 0.3, duration: 1.3, height: 2.5 }
@@ -642,7 +693,7 @@ const shown = (object) => {
 // `day` est une ref vers le thème choisi (voir Experience)
 export default function Apartment({ reducedMotion = false, day }) {
   const scroll = useScroll()
-  const { camera, size, pointer, clock, gl } = useThree()
+  const { camera, size, pointer, clock, gl, events } = useThree()
   const { scene } = useGLTF(MODEL_URL)
   const [bubble, setBubble] = useState(null)
   const anchor = useRef()
@@ -661,8 +712,22 @@ export default function Apartment({ reducedMotion = false, day }) {
     hover: null,
     attention: ROOMS.map(() => 0),
     waves: ROOMS.map(() => -99),
+    scubas: ROOMS.map(() => -99),
+    clicks: ROOMS.map(() => 0), // les clics sur le personnage, par pièce
     dogWake: -99,
+    drawerAt: -99, // le dernier clic sur le tiroir des pierres
+    drawerOpen: 0,
+    zone: null, // la zone où l'on s'est approché
+    seenFrom: new Vector3(), // la position de la caméra à l'image précédente…
+    recheck: 0, // …et le compte des images où elle a bougé
+    occluders: [], // ce qui gêne la vue de l'objet examiné, caché pendant le gros plan
+    hit: null, // le dernier point visé (pour cliquer sur un écran)
+    camEye: new Vector3(),
+    camFocus: new Vector3(),
+    danceAt: -99, // quand Lego s'est mis à danser
+    allFound: false, // tout est trouvé : un clic sur Lego relance la danse
     globeSpin: 0,
+    nen: 0, // le prochain effet du test de Nen
     glow: { banner: 0 },
     bannerPhase: 0,
     wall: { here: false, wakeAt: null, until: 0, glow: 0 }, // l'écran mural du bureau
@@ -679,8 +744,6 @@ export default function Apartment({ reducedMotion = false, day }) {
   const [label, setLabel] = useState(null)
   const { ui } = useContent() // les textes de la scène, dans la langue choisie
   const [inspecting, setInspecting] = useState(false)
-  const hintAnchor = useRef()
-  const labelAnchor = useRef()
 
   // Prépare le modèle une seule fois : centrage, ombres, couleurs, décor animé, personnage et Lego
   const world = useMemo(() => {
@@ -758,6 +821,10 @@ export default function Apartment({ reducedMotion = false, day }) {
       // Les globes gris deviennent Kevin, le cube violet (chambre), et la boule de cristal à quatre étoiles (bureau)
       const relics = []
       let kevin = null
+      let vitaGame = null // la PS Vita : en gros plan, on y joue
+      const eggs = {} // les easter eggs qui réagissent (voir useFrame et onClick)
+      // Un objet qui dit quelque chose au clic : `line` est une clé de ui.lines
+      const say = (object, label, line) => (object.userData.action = { type: "say", label, line, object })
       const globes = rooms
         .map((r) => [r.object, findMesh(r.object, GLOBE)])
         .filter(([, m]) => m)
@@ -830,12 +897,20 @@ export default function Apartment({ reducedMotion = false, day }) {
       lego.root.userData.action = { type: "dog", object: lego.root }
       lego.root.updateMatrixWorld(true)
       chambre.attach(lego.root)
+      // Les confettis de la fin, qui jaillissent du panier
+      const confetti = makeConfetti(1 / lego.root.getWorldScale(new Vector3()).x)
+      lego.root.add(confetti.root)
+      lego.confetti = confetti
 
       // Décor ajouté : guirlande au-dessus de la fenêtre de la chambre, horloge en classe, sac, eau et banane, switch
       const decor = [...relics]
+      let bedWindow = null // le cadre de la fenêtre de la chambre : la marque se pose à sa gauche
+      // Les meubles des regroupements (voir GROUPS) : un clic dessus ouvre le groupe ; `normal` : d'où le regarder
+      const furniture = {}
       const windowMesh = findMesh(chambre, WINDOW)
       if (windowMesh) {
         const w = wallFrame(windowMesh, rooms[0].sphere.center)
+        bedWindow = w
         const s = measures[0]?.scale ?? 1
         const top = w.center.clone().addScaledVector(WORLD_UP, w.height / 2 + GARLAND.above * s).addScaledVector(w.normal, w.depth / 2 + 0.05 * s)
         const half = w.right.clone().multiplyScalar(w.width / 2 + GARLAND.overhang * s)
@@ -906,6 +981,15 @@ export default function Apartment({ reducedMotion = false, day }) {
         osi.updateMatrixWorld(true)
         classe.attach(osi)
         inspectable(osi, "Le modèle OSI", w.normal, { margin: 1 })
+        // La couche 8 se pose sur la ligne laissée libre en haut de l'affiche, au survol
+        const slot = osiLayer8Frame()
+        const layer8 = new Mesh(
+          new PlaneGeometry(posterW * slot.width, posterH * slot.height),
+          new MeshStandardMaterial({ map: osiLayer8Texture((posterW * slot.width) / (posterH * slot.height)), transparent: true, opacity: 0, roughness: 0.7 }),
+        )
+        osi.add(layer8)
+        layer8.position.set(0, posterH * (0.5 - slot.y), 0.002 * sc) // dans le repère de l'affiche (qui a la taille du monde)
+        eggs.layer8 = { mesh: layer8, action: osi.userData.action }
       }
       const board = findMesh(classe, WHITEBOARD)
       // Le tableau : séries et transformée de Fourier
@@ -952,12 +1036,20 @@ export default function Apartment({ reducedMotion = false, day }) {
           chambre.attach(vita.root)
           inspectable(vita.root, "Ma PS Vita", shelfFacing.clone().add(new Vector3(0, 1.6, 0)), { margin: 1.1 })
           nightItems.vita = vita.root
+          vitaGame = vita
+          Object.assign(vita.root.userData.action, { hint: "playHint", press: () => vita.press() }) // en gros plan, on y joue
         }
         // La commode noire : refaite en bois foncé, pour qu'on voie ses tiroirs
         const chest = findMesh(chambre, CHEST)
         if (chest) {
-          const back = new Box3().setFromObject(chest).getCenter(new Vector3()).sub(rooms[0].sphere.center).setY(0).normalize()
-          decor.push(replaceMesh(chambre, chest, measures[0], back, makeDrawerChest))
+          // Les tiroirs face à la caméra (`away` part vers le fond de la pièce), pour qu'on voie celui qui est entrouvert
+          const drawers = replaceMesh(chambre, chest, measures[0], away, makeDrawerChest)
+          const stones = makeInfinityStones(drawers.trayHeight * 0.8)
+          drawers.tray.add(stones.root)
+          drawers.drawer.userData.action = { type: "drawer", label: "Le tiroir", object: drawers.drawer }
+          eggs.drawer = drawers
+          furniture["chambre:La commode"] = { handles: [drawers.root], normal: mix([away, -1], [new Vector3().crossVectors(WORLD_UP, away), 0.45], [WORLD_UP, 0.5]), margin: 1.5 }
+          decor.push(drawers, stones)
         }
         // La table de chevet devient une étagère chromée, élargie côté pièce : la platine dessus, mes chaussures dessous
         const nightstand = findMesh(chambre, NIGHTSTAND)
@@ -997,7 +1089,60 @@ export default function Apartment({ reducedMotion = false, day }) {
           shelf.root.translateX(-side * CHEVET.shift * sc)
           shelf.root.updateMatrixWorld(true)
           if (bedside) bedside.light.position.copy(chambre.worldToLocal(bedside.root.localToWorld(bedside.bulb.clone())))
+          // (mesurée dans le repère du meuble, pour ne pas déborder sur la commode voisine)
+          const rackBox = new Box3()
+          const toRack = new Matrix4().copy(shelf.root.matrixWorld).invert()
+          shelf.root.traverse((c) => {
+            if (!c.isMesh) return
+            c.geometry.computeBoundingBox()
+            rackBox.union(c.geometry.boundingBox.clone().applyMatrix4(new Matrix4().multiplyMatrices(toRack, c.matrixWorld)))
+          })
+          const grip = new Mesh(new BoxGeometry(...rackBox.getSize(new Vector3()).toArray()), new MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false }))
+          grip.position.copy(rackBox.getCenter(new Vector3()))
+          shelf.root.add(grip)
+          furniture["chambre:Le meuble à chaussures"] = { handles: [shelf.root, grip], normal: mix([shelfFacing, 1], [WORLD_UP, 0.55]) }
           inspectable(turntable.root, "Ma platine", mix([shelfFacing, 1], [WORLD_UP, 1]), { margin: 1.1 })
+          // En gros plan, un clic change de disque
+          Object.assign(turntable.root.userData.action, {
+            hint: "recordHint",
+            tip: "recordTip", // sous son nom, au survol : on devine qu'on peut changer de musique
+            press() {
+              const { title, muted } = sound.nextRecord()
+              setBubble({ text: `♪ ${title}`, muted, object: turntable.root, at: clock.elapsedTime })
+            },
+          })
+          // La gamelle de Lego (et son diamant) au sol devant le tapis, l'holocron à côté des chaussures
+          const bowl = makeDogBowl()
+          bowl.root.scale.setScalar(EGGS.bowl.size)
+          shelf.root.add(bowl.root) // pour sa taille ; on la pose ensuite dans la chambre, au niveau du sol de Lego
+          chambre.attach(bowl.root)
+          bowl.root.position.set(EGGS.bowl.at[0], lego.root.position.y, EGGS.bowl.at[1])
+          say(bowl.root, "La gamelle de Lego", "snatch")
+          const holocron = makeHolocron()
+          holocron.root.scale.setScalar(EGGS.holocron.size)
+          holocron.root.position.set(side * EGGS.holocron.along, low, 0)
+          holocron.root.rotation.y = 0.4
+          shelf.root.add(holocron.root)
+          say(holocron.root, "Un holocron", "holocron")
+          eggs.holocron = holocron
+          decor.push(bowl, holocron)
+          // La marque du sacrifice, en petit sur le mur à gauche de la fenêtre : on cherche le mur avec un rayon
+          if (bedWindow) {
+            const w = bedWindow
+            const spot = w.center.clone().addScaledVector(w.right, -(w.width / 2 + EGGS.mark.aside * sc))
+            const wallHit = new Raycaster(spot.clone().addScaledVector(w.normal, 0.5 * sc), w.normal.clone().negate())
+              .intersectObject(chambre, true)
+              .find((h) => h.object.isMesh && shown(h.object) && !actionOf(h.object))
+            if (wallHit) {
+              const mark = makeBrandMark()
+              mark.root.scale.setScalar(sc * EGGS.mark.size)
+              mark.root.position.copy(wallHit.point).addScaledVector(w.normal, 0.003 * sc)
+              mark.root.lookAt(mark.root.position.clone().add(w.normal))
+              mark.root.updateMatrixWorld(true)
+              chambre.attach(mark.root)
+              inspectable(mark.root, "Une marque étrange", w.normal, { margin: 2.5, blend: 0 })
+            }
+          }
           // Trois paires par plateau, réduites si l'étagère est peu profonde
           const fit = Math.min(1, (depth - 0.02) / 0.28)
           ;[low, middle].forEach((y, level) => {
@@ -1015,6 +1160,7 @@ export default function Apartment({ reducedMotion = false, day }) {
         if (shelf && books.length) {
           const lower = shelf.clone()
           shelf.parent.add(lower)
+          furniture["chambre:L'étagère"] = { handles: [shelf, lower], margin: 1.25 } // un peu de recul : les deux planches entières
           const at = shelf.getWorldPosition(new Vector3()).addScaledVector(WORLD_UP, -LOWER_SHELF.drop * sc)
           lower.position.copy(shelf.parent.worldToLocal(at))
           lower.updateMatrixWorld(true)
@@ -1039,6 +1185,7 @@ export default function Apartment({ reducedMotion = false, day }) {
           const soap = makeSoap()
           put(soap, LOWER_SHELF.soap, SIZES.dvds) // un pain de savon rose à côté des films, tourné pour tenir sur la planche
           soap.root.rotateY(Math.PI / 2)
+          say(soap.root, "Un savon", "fightclub")
           inspectable(dvds.root, "Mes films", shelfFacing.clone().add(new Vector3(0, 0.25, 0)), { margin: 1 })
         }
       }
@@ -1074,12 +1221,46 @@ export default function Apartment({ reducedMotion = false, day }) {
           for (const mesh of pot) box.expandByObject(mesh)
           const potSpot = box.getCenter(new Vector3()).setY(box.min.y)
           const shift = lava.root.getWorldPosition(new Vector3()).sub(potSpot)
+          shift.addScaledVector(m0.facing, -PENCIL_SHIFT.forward * m0.scale).addScaledVector(SCREEN_RIGHT, PENCIL_SHIFT.right * m0.scale)
           for (const mesh of pot) {
             mesh.position.copy(mesh.parent.worldToLocal(mesh.getWorldPosition(new Vector3()).add(shift)))
             mesh.updateMatrixWorld()
           }
           lava.root.position.copy(chambre.worldToLocal(potSpot.addScaledVector(SCREEN_RIGHT, LAVA_RIGHT * m0.scale)))
           lava.root.updateMatrixWorld(true)
+        }
+        // L'Anneau unique, à côté de la lampe à lave
+        const ring = makeOneRing()
+        ring.root.scale.setScalar(m0.scale * EGGS.ring.size)
+        ring.root.position.copy(lava.root.getWorldPosition(new Vector3()).addScaledVector(SCREEN_RIGHT, EGGS.ring.right * m0.scale).addScaledVector(away, EGGS.ring.back * m0.scale))
+        ring.root.updateMatrixWorld(true)
+        chambre.attach(ring.root)
+        ring.root.add(hitArea(EGGS.ring.hit / EGGS.ring.size))
+        say(ring.root, "Un anneau", "ring")
+        // Mon téléphone sur le tapis de souris : Samantha appelle la nuit
+        const phone = makePhone()
+        place(chambre, m0, phone.root, EGGS.phone, m0.deskTop)
+        phone.root.scale.multiplyScalar(EGGS.phone.size)
+        phone.root.rotateY(0.25 + Math.PI) // l'heure se lit depuis le visiteur, pas depuis la chaise
+        say(phone.root, "Mon téléphone", "her")
+        // Le verre d'eau du test de Nen, devant le casque
+        const glass = makeNenGlass()
+        place(chambre, m0, glass.root, EGGS.glass, m0.deskTop)
+        glass.root.scale.multiplyScalar(EGGS.glass.size)
+        glass.root.userData.action = { type: "nen", label: "Un verre d'eau", object: glass.root }
+        eggs.glass = glass
+        decor.push(ring, phone, glass)
+        // La poubelle devient la boîte de Seven
+        const bin = findMesh(chambre, SEVEN_BIN)
+        if (bin) {
+          const toward = new Box3().setFromObject(bin).getCenter(new Vector3()).sub(rooms[0].sphere.center).setY(0).normalize()
+          const box = replaceMesh(chambre, bin, m0, toward, makeSevenBox)
+          for (const spec of BIN_PAPERS) {
+            const paper = findMesh(chambre, spec)
+            if (paper) paper.visible = false
+          }
+          say(box.root, "Une boîte", "seven")
+          decor.push(box)
         }
       }
       if (m1) {
@@ -1093,6 +1274,21 @@ export default function Apartment({ reducedMotion = false, day }) {
         place(classe, m1, netSwitch.root, { ahead: between.dot(m1.facing) / m1.scale, aside: between.dot(m1.side) / m1.scale }, m1.deskTop)
         decor.push(netSwitch)
         inspectable(netSwitch.root, "La baie réseau", mix([m1.facing, -1], [WORLD_UP, 0.35]), { margin: 1 })
+        const classScreen = screens.find((screen) => screen.mesh.parent && classe.getObjectById(screen.mesh.id))
+        if (classScreen) {
+          const sc = m1.scale
+          // Collé en haut à gauche de la première dalle, qui affiche Packet Tracer
+          const { center, right, up, normal, width, height } = classScreen.frames[0]
+          const note = makePostIt("root / rtlry")
+          const half = 0.03 * sc * EGGS.postIt.size
+          note.root.scale.setScalar(sc * EGGS.postIt.size)
+          note.root.position.copy(center).addScaledVector(right, -width / 2 + half * 0.8).addScaledVector(up, height / 2 - half * 0.7).addScaledVector(normal, 0.014 * sc)
+          note.root.lookAt(note.root.position.clone().add(normal))
+          note.root.rotateZ(0.12)
+          note.root.updateMatrixWorld(true)
+          classe.attach(note.root)
+          inspectable(note.root, "Un post-it", normal, { margin: 2, blend: 0 })
+        }
         inspectable(notebook.root, "Le cahier", mix([WORLD_UP, 1], [m1.facing, -0.3]), { margin: 0.8, blend: 0 })
         const backpack = makeBackpack()
         place(classe, m1, backpack.root, BACKPACK, m1.floor)
@@ -1109,6 +1305,7 @@ export default function Apartment({ reducedMotion = false, day }) {
         // puis la fontaine à eau à sa droite
         const cabinet = findMesh(bureau, OFFICE_CABINET)
         const desk = findMesh(bureau, OFFICE_DESK)
+        if (desk) furniture["bureau:Le poste"] = { handles: [desk] }
         if (cabinet && desk && officeWall) {
           for (const spec of [OFFICE_CABINET, PLANTS, ...OFFICE_PLANT]) {
             const mesh = findMesh(bureau, spec)
@@ -1140,9 +1337,18 @@ export default function Apartment({ reducedMotion = false, day }) {
           const cooler = makeWaterCooler()
           stand(cooler, 2 * P + cups + C + 2 * gap, C)
           decor.push(plant, cooler)
+          cooler.root.userData.action = { type: "cooler", label: "La fontaine à eau", object: cooler.body }
+          eggs.cooler = cooler
         }
         const headset = makeDeskHeadset()
         place(bureau, m2, headset.root, DESK_HEADSET, m2.deskTop)
+        const crystal = relics.find((relic) => bureau.getObjectById(relic.root.id))
+        if (crystal) {
+          const at = headset.root.getWorldPosition(new Vector3())
+          const toward = crystal.root.getWorldPosition(new Vector3()).sub(at).setY(0)
+          at.addScaledVector(toward.normalize(), DESK_HEADSET.toward * m2.scale)
+          headset.root.position.copy(bureau.worldToLocal(at))
+        }
         headset.root.rotateY(-0.5)
         const badge = makeBadge(ecritelLogo)
         const screens = m2.screens.clone().sub(m2.center).setY(0)
@@ -1176,11 +1382,38 @@ export default function Apartment({ reducedMotion = false, day }) {
             // L'écran qui fait défiler mes sites : une fois zoomé, un clic ouvre celui qui est affiché
             const showcase = screens.find((screen) => screen.mesh === c)?.painters.find((paint) => "showing" in paint)
             if (showcase) c.userData.action.link = () => showcase.showing?.url
+            const lab = screens.find((screen) => screen.mesh === c && screen.painters.includes(packetTracerClick.painter))
+            if (lab)
+              Object.assign(c.userData.action, {
+                hint: "labHint",
+                press: (uv) => uv && Math.floor(uv.x * lab.panels) === lab.painters.indexOf(packetTracerClick.painter) && packetTracerClick((uv.x * lab.panels) % 1, 1 - uv.y),
+              })
           }
         })
       })
 
-      scene.userData.world = { rooms, people, screens, bedside, plants, globes, kevin, banner, wallScreen, lego, decor, vault, overview: sphereOf(scene) }
+      // Les regroupements : dans la pièce, les petits objets d'un même meuble ne font qu'un (« L'étagère »).
+      // Un clic s'en approche, puis on clique sur chacun. Les gros objets (le PC, la boîte) restent cliquables directement.
+      const zones = []
+      for (const [name, room] of [["chambre", chambre], ["classe", classe], ["bureau", bureau]]) {
+        const members = new Map()
+        room.traverse((o) => {
+          const action = o.userData.action
+          if (action) members.set(action, (members.get(action) ?? []).concat(o))
+        })
+        for (const { label, members: labels, hide = -1 } of GROUPS[name]) {
+          const group = [...members].filter(([action]) => labels.includes(action.label))
+          if (group.length < 2) continue
+          const { handles = [], normal = null, margin = ZONE.margin } = furniture[`${name}:${label}`] ?? {}
+          const action = { type: "zone", label, object: group.flatMap(([, list]) => list), normal: normal?.normalize() ?? null, margin, blend: normal ? 0 : 1, hide, hint: "zoneHint" }
+          for (const [member] of group) member.zone = action
+          // Le meuble lui-même, là où rien d'autre n'est cliquable
+          for (const handle of handles) handle.userData.action ??= action
+          zones.push(action)
+        }
+      }
+
+      scene.userData.world = { rooms, people, screens, bedside, plants, globes, kevin, eggs, vita: vitaGame, banner, wallScreen, lego, decor, vault, zones, overview: sphereOf(scene) }
     }
 
     const { rooms, overview } = scene.userData.world
@@ -1217,11 +1450,31 @@ export default function Apartment({ reducedMotion = false, day }) {
     for (const hit of e.intersections.slice(0, PICK_DEPTH)) {
       if (!shown(hit.object)) continue
       const action = actionOf(hit.object)
-      if (action) return action
+      if (action) {
+        // Dans la pièce, un objet regroupé répond au nom de son groupe
+        const target = allowed(action) ? action : action.zone && allowed(action.zone) ? action.zone : null
+        if (!target) continue
+        if (target.type !== "zone") state.current.hit = hit
+        return target
+      }
       // Un objet plein sans action (le bureau, un mur) cache ce qu'il y a derrière
-      if (hit.object.isMesh && ![hit.object.material].flat().some((m) => m.transparent)) return null
+      if (hit.object.isMesh && ![hit.object.material].flat().some((m) => m.transparent)) break
     }
     return null
+  }
+  // Ce qui peut réagir maintenant : dans la pièce, les zones et ce qui n'en a pas ; dans une zone, ses objets ; en gros plan, l'objet seul
+  const allowed = (action) => {
+    const at = state.current.inspect
+    if (!at) return !action.zone
+    if (at.type === "zone") return action.zone === at
+    return action === at
+  }
+  // Un cran en arrière : de l'objet à sa zone, de la zone à la pièce
+  const back = () => {
+    const s = state.current
+    if (s.inspect && s.zone && s.inspect !== s.zone) return inspect(s.zone)
+    s.zone = null
+    inspect(null)
   }
   const hoverOn = (action) => {
     state.current.hover = action
@@ -1229,7 +1482,46 @@ export default function Apartment({ reducedMotion = false, day }) {
     // L'étiquette ne change que quand on passe d'un objet à un autre (pas de rendu React à chaque mouvement)
     // Un nom d'objet ou un type qui a une étiquette, traduit à l'affichage (ui.objects, ui.labels)
     const text = action && (action.label ?? (action.type in ui.labels ? action.type : null))
-    setLabel((current) => (current?.object === action?.object && current?.text === text ? current : text ? { text, object: action.object } : null))
+    setLabel((current) => (current?.object === action?.object && current?.text === text ? current : text ? { text, tip: action.tip, object: action.object, action } : null))
+  }
+  // D'où la caméra regarde `shown` : sa direction (ou celle de la visite), assez loin pour qu'il tienne à l'écran
+  const eyeFor = (shown, center, radius, out) => {
+    const s = state.current
+    const dir = shown.normal ? out.copy(shown.normal).lerp(s.axes.view, shown.blend).normalize() : out.copy(s.axes.view)
+    const fit = Math.min(MathUtils.degToRad(camera.fov), 2 * Math.atan(Math.tan(MathUtils.degToRad(camera.fov) / 2) * camera.aspect))
+    return dir.multiplyScalar((radius / Math.sin(fit / 2)) * shown.margin).add(center)
+  }
+  // Ce qui se trouve entre la caméra et l'objet examiné : on le cache pendant le gros plan.
+  // Seulement les objets de taille moyenne (une chaise, un meuble devant) : jamais les murs, le sol ni les bureaux,
+  // ni ce qui touche l'objet (le cadre d'un écran, la planche sous des livres).
+  const occludersOf = (action, box, room) => {
+    const center = box.getCenter(new Vector3())
+    const eye = eyeFor(action, center, box.getSize(new Vector3()).length() / 2, new Vector3())
+    const roomRadius = world.rooms.find((r) => r.object === room)?.sphere.radius ?? Infinity
+    const limit = roomRadius * OCCLUDER.share
+    const radiusOf = (o) => new Box3().setFromObject(o).getSize(new Vector3()).length() / 2
+    const inside = (o, list) => list.some((t) => { for (let p = o; p; p = p.parent) if (p === t) return true; return false })
+    const keep = [...action.object, ...world.people.filter(Boolean).map((p) => p.root), world.lego.root]
+    const near = action.object.map((o) => new Box3().setFromObject(o).expandByScalar(roomRadius * OCCLUDER.touch))
+    const touches = (o) => { const b = new Box3().setFromObject(o); return near.some((n) => n.intersectsBox(b)) }
+    const found = new Set()
+    // Le centre et le haut de l'objet : le bas touche souvent le meuble sur lequel il est posé
+    const points = [center, ...[-1, 1].flatMap((x) => [-1, 1].map((z) => new Vector3(x, 1, z)))].map((k, n) => (n ? center.clone().lerp(new Vector3(k.x < 0 ? box.min.x : box.max.x, box.max.y, k.z < 0 ? box.min.z : box.max.z), OCCLUDER.spread) : k))
+    for (const point of points) {
+      const toward = point.clone().sub(eye)
+      const length = toward.length()
+      const hits = new Raycaster(eye, toward.normalize(), 0, length * OCCLUDER.before).intersectObject(room, true)
+      for (const hit of hits) {
+        if (!hit.object.isMesh || !shown(hit.object) || inside(hit.object, keep)) continue
+        // Le plus grand ensemble qui reste petit, sans jamais cacher ce qui porte l'objet (la commode de son tiroir)
+        const holds = (o) => action.object.some((t) => inside(t, [o]))
+        if (holds(hit.object)) continue
+        let piece = hit.object
+        while (piece.parent && piece.parent !== room && radiusOf(piece.parent) < limit && !holds(piece.parent)) piece = piece.parent
+        if (radiusOf(piece) < limit && !touches(piece)) found.add(piece)
+      }
+    }
+    return [...found]
   }
   const inspect = (action) => {
     const s = state.current
@@ -1246,48 +1538,100 @@ export default function Apartment({ reducedMotion = false, day }) {
       s.frameOf = {
         room,
         center: toRoom(box.getCenter(new Vector3())),
-        bottom: toRoom(box.getCenter(new Vector3()).setY(box.min.y)),
         radius: box.getSize(new Vector3()).length() / 2,
       }
     }
+    for (const o of s.occluders) o.visible = true
+    s.occluders = action && s.frameOf.room ? occludersOf(action, new Box3().copy(action.object.reduce((b, o) => b.expandByObject(o), new Box3())), s.frameOf.room) : []
     setInspecting(!!action)
   }
   useEffect(() => {
-    const onKey = (e) => e.key === "Escape" && inspect(null)
+    const onKey = (e) => {
+      if (e.key === "Escape") back()
+      // Espace fait sauter, quand on joue sur la PS Vita
+      const vita = world.vita
+      if (e.key === " " && vita && state.current.inspect?.object.includes(vita.root)) {
+        e.preventDefault()
+        vita.press()
+      }
+    }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
+  })
+  // Tout est trouvé : Lego danse, les confettis volent, une petite musique joue
+  const celebrate = () => {
+    const s = state.current
+    const now = clock.elapsedTime
+    if (now - s.danceAt < DANCE.seconds) return
+    world.lego.confetti.burst(now)
+    // La danse part quand la musique démarre vraiment (le fichier peut mettre un instant à arriver), au plus tard après DANCE.wait
+    const music = sound.clip("lego")
+    s.danceAt = music ? now + DANCE.wait : now
+    music?.then(() => (s.danceAt = Math.min(s.danceAt, clock.elapsedTime)))
+    setBubble({ line: "allFound", object: world.lego.root, at: now })
+  }
+  useEffect(() => {
+    const onComplete = (e) => {
+      state.current.allFound = true
+      if (e.detail.fresh) celebrate()
+    }
+    window.addEventListener("portfolio:complete", onComplete)
+    return () => window.removeEventListener("portfolio:complete", onComplete)
   })
   // Le compteur d'objets découverts : chaque objet cliquable compte une fois (voir Discoveries)
   useEffect(() => {
     const keys = new Set()
-    scene.traverse((o) => o.userData.action && keys.add(discoveryKey(o.userData.action)))
+    scene.traverse((o) => o.userData.action && o.userData.action.type !== "zone" && keys.add(discoveryKey(o.userData.action)))
     announce("discoverable", [...keys])
   }, [scene])
-  // Pendant l'examen d'un objet, seul cet objet réagit : les autres ne s'allument pas et ne s'ouvrent pas
-  const onPointerMove = (e) => {
-    const action = pick(e)
-    hoverOn(!state.current.inspect || action === state.current.inspect ? action : null)
-  }
+  // Seul ce qui est permis réagit (voir allowed)
+  const onPointerMove = (e) => hoverOn(pick(e))
   const onPointerLeave = () => hoverOn(null)
   const onClick = (e) => {
     const action = pick(e)
     const s = state.current
-    // Pendant l'examen d'un objet, un clic ouvre son lien s'il en a un, sinon revient à la vue normale
-    if (s.inspect) {
-      const url = action === s.inspect && action.link?.()
-      return url ? window.open(url, "_blank", "noopener") : inspect(null)
+    // En gros plan, un clic sur l'objet le fait réagir (la PS Vita saute, la platine change de disque, un lien s'ouvre) ;
+    // un clic à côté recule d'un cran
+    if (s.inspect && s.inspect.type !== "zone") {
+      if (action !== s.inspect) return back()
+      if (action.press) return action.press(s.hit?.uv)
+      const url = action.link?.()
+      return url ? window.open(url, "_blank", "noopener") : back()
     }
-    if (action) announce("discover", discoveryKey(action))
-    if (!action) return
+    if (!action) return s.inspect && back()
+    if (action.type === "zone") {
+      s.zone = action
+      return inspect(action)
+    }
+    announce("discover", discoveryKey(action))
     const now = clock.elapsedTime
     if (action.type === "inspect") {
       inspect(action)
     } else if (action.type === "person") {
-      s.waves[action.room] = now
-      setBubble({ room: action.room, at: now })
+      // Une fois sur trois, il fait le scuba ; sinon, il fait coucou et dit un mot sur la pièce
+      if (++s.clicks[action.room] % 3 === 0) {
+        s.scubas[action.room] = now
+      } else {
+        s.waves[action.room] = now
+        setBubble({ room: action.room, at: now })
+      }
+    } else if (action.type === "say") {
+      const line = action.line === "her" ? (s.daylight > 0.5 ? "herDay" : "herNight") : action.line
+      setBubble({ line, object: action.object, at: now })
+    } else if (action.type === "nen") {
+      const kind = NEN[s.nen++ % NEN.length]
+      world.eggs.glass.react(kind, reducedMotion ? 0 : now)
+      setBubble({ line: "nen-" + kind, object: action.object, at: now })
+    } else if (action.type === "drawer") {
+      s.drawerAt = now
+      setBubble({ line: "tva", object: action.object, at: now })
+    } else if (action.type === "cooler") {
+      sound.gulp()
+      world.eggs.cooler.gulp(reducedMotion ? 0 : now)
     } else if (action.type === "dog") {
       s.dogWake = now
       sound.bark()
+      if (s.allFound) celebrate()
       inspect({ type: "inspect", object: [world.lego.root], normal: null, margin: 1.1, blend: 1, hide: -1 })
     } else if (action.type === "globe") {
       s.globeSpin = 1
@@ -1353,21 +1697,23 @@ export default function Apartment({ reducedMotion = false, day }) {
     s.lookAt.lerpVectors(a.target, b.target, t)
 
     // Examen d'un objet : la caméra le rejoint, et revient si on scrolle
-    if (s.inspect && Math.abs(scroll.offset - s.inspectOffset) > 0.01) inspect(null)
+    if (s.inspect && Math.abs(scroll.offset - s.inspectOffset) > 0.01) (s.zone = null), inspect(null)
     s.zoom = reducedMotion ? (s.inspect ? 1 : 0) : MathUtils.damp(s.zoom, s.inspect ? 1 : 0, INSPECT.speed, delta)
     scroll.inspect = s.zoom // les cartes de texte s'effacent (voir Overlay)
     const framed = s.frameOf
     if (framed?.room) framed.room.updateMatrixWorld() // la pièce vient de bouger : sa position de cette image
     const fromRoom = (local, out) => (framed.room ? framed.room.localToWorld(out.copy(local)) : out.copy(local))
+    for (const o of s.occluders) o.visible = s.zoom < OCCLUDER.from
     if (s.zoom > 0.001 && s.shown && framed) {
       fromRoom(framed.center, s.focus)
       const radius = framed.radius
-      const dir = s.shown.normal ? s.eye.copy(s.shown.normal).lerp(s.axes.view, s.shown.blend).normalize() : s.eye.copy(s.axes.view)
-      const fit = Math.min(MathUtils.degToRad(camera.fov), 2 * Math.atan(Math.tan(MathUtils.degToRad(camera.fov) / 2) * camera.aspect))
-      const distance = (radius / Math.sin(fit / 2)) * s.shown.margin
       const e = ease(s.zoom)
-      camera.position.lerp(dir.multiplyScalar(distance).add(s.focus), e)
-      s.lookAt.lerp(s.focus, e)
+      const eye = eyeFor(s.shown, s.focus, radius, s.eye)
+      if (s.zoom < 0.02 || reducedMotion) s.camEye.copy(eye), s.camFocus.copy(s.focus)
+      s.camEye.lerp(eye, 1 - Math.exp(-INSPECT.speed * 1.5 * delta))
+      s.camFocus.lerp(s.focus, 1 - Math.exp(-INSPECT.speed * 1.5 * delta))
+      camera.position.lerp(s.camEye, e)
+      s.lookAt.lerp(s.camFocus, e)
     }
 
     // Léger décalage de la caméra qui suit la souris
@@ -1379,6 +1725,10 @@ export default function Apartment({ reducedMotion = false, day }) {
       camera.position.addScaledVector(s.axes.right, s.parallax.x * amount * still).addScaledVector(s.axes.up, s.parallax.y * amount * still)
     }
     camera.lookAt(s.lookAt)
+    // La caméra a bougé sous une souris immobile : on relit ce qu'il y a sous le curseur (étiquette, curseur à jour),
+    // quelques fois par seconde seulement
+    if (camera.position.distanceToSquared(s.seenFrom) > 1e-8 && ++s.recheck % HOVER_RECHECK === 0) events.update?.()
+    s.seenFrom.copy(camera.position)
 
     // Le personnage apparaît dans la pièce visitée ; survolé, il regarde le visiteur ; cliqué, il fait coucou
     people.forEach((person, k) => {
@@ -1388,7 +1738,9 @@ export default function Apartment({ reducedMotion = false, day }) {
       const hovered = s.hover?.type === "person" && s.hover.room === k
       s.attention[k] = MathUtils.damp(s.attention[k], hovered ? 1 : 0, 4, delta)
       const wave = reducedMotion ? 0 : pulse(now - s.waves[k], WAVE_SECONDS)
-      if (person.root.visible) animatePerson(person, time, k * 3.7, reducedMotion ? null : camera.position, { attention: s.attention[k], wave })
+      const beat = now - s.scubas[k]
+      const scuba = reducedMotion ? 0 : pulse(beat, SCUBA_SECONDS)
+      if (person.root.visible) animatePerson(person, time, k * 3.7, reducedMotion ? null : camera.position, { attention: s.attention[k], wave, scuba, beat })
     })
 
     // Lego se réveille quand on clique dessus, quand on le survole, ou quand le personnage de la chambre se retourne
@@ -1407,26 +1759,27 @@ export default function Apartment({ reducedMotion = false, day }) {
       }
     }
     animateDog(world.lego, time, reducedMotion ? 0 : Math.max(pulse(now - s.dogWake, DOG.awakeSeconds), turned * 0.6, petted), look)
+    animateDance(world.lego, reducedMotion ? -1 : now - s.danceAt)
+    world.lego.confetti.animate(now)
 
-    // Bulle au-dessus du personnage
+    // Bulle au-dessus du personnage, ou de l'objet qui parle
     if (bubble && anchor.current) {
-      const target = people[bubble.room]?.parts.head
-      if (target) {
-        target.getWorldPosition(anchor.current.position)
-        anchor.current.position.y += target.getWorldScale(s.scale).y * 0.32
+      if (bubble.object) {
+        s.box.setFromObject(bubble.object)
+        s.box.getCenter(anchor.current.position)
+        anchor.current.position.y = s.box.max.y + world.rooms[0].sphere.radius * 0.06
+      } else {
+        const target = people[bubble.room]?.parts.head
+        if (target) {
+          target.getWorldPosition(anchor.current.position)
+          anchor.current.position.y += target.getWorldScale(s.scale).y * 0.32
+        }
       }
     }
 
     // Ce qui mène ailleurs s'illumine au survol, et son étiquette flotte au-dessus
     s.glow.banner = MathUtils.damp(s.glow.banner, s.hover?.type === "banner" ? 1 : 0, 6, delta)
     if (world.banner) world.banner.material.emissiveIntensity = s.glow.banner * 0.45
-    if (label && labelAnchor.current) {
-      s.box.makeEmpty()
-      for (const target of [].concat(label.object)) s.box.expandByObject(target)
-      s.box.getCenter(labelAnchor.current.position)
-      labelAnchor.current.position.y = s.box.max.y
-    }
-    if (inspecting && hintAnchor.current && framed) fromRoom(framed.bottom, hintAnchor.current.position)
 
     // Décor : plantes, globes, bannière, écrans, lampe de chevet, poussière
     world.plants.forEach((p, k) => {
@@ -1435,7 +1788,15 @@ export default function Apartment({ reducedMotion = false, day }) {
     })
     s.globeSpin = MathUtils.damp(s.globeSpin, s.hover?.type === "globe" ? 0.5 : 0, 1.2, delta)
     if (!reducedMotion) world.globes.forEach((g) => (g.rotation.y += delta * (0.25 + s.globeSpin * 8)))
+    if (world.eggs.drawer) {
+      s.drawerOpen = MathUtils.damp(s.drawerOpen, now - s.drawerAt < DRAWER_SECONDS ? 1 : 0, 4, delta)
+      world.eggs.drawer.open(s.drawerOpen)
+    }
+    if (world.vita) world.vita.play(!!s.inspect?.object.includes(world.vita.root) && s.zoom > 0.5)
     if (world.kevin) world.kevin.lit = MathUtils.damp(world.kevin.lit, s.hover?.object === world.kevin.root ? 1 : 0, 6, delta)
+    const { holocron, layer8 } = world.eggs
+    if (holocron) holocron.lit = MathUtils.damp(holocron.lit, s.hover?.object === holocron.root ? 1 : 0, 5, delta)
+    if (layer8) layer8.mesh.material.opacity = MathUtils.damp(layer8.mesh.material.opacity, s.hover === layer8.action || s.inspect === layer8.action ? 1 : 0, 5, delta)
     if (world.banner) {
       // Au survol, la bannière ondule davantage, comme soulevée par un courant d'air
       // La phase avance à sa propre vitesse : changer la vitesse ne la fait pas sauter
@@ -1478,6 +1839,16 @@ export default function Apartment({ reducedMotion = false, day }) {
     })
   })
 
+  const keepOnScreen = (el, cam, { width, height }) => {
+    const v = el.getWorldPosition(new Vector3()).project(cam)
+    return [MathUtils.clamp(((v.x + 1) / 2) * width, LABELS.side, width - LABELS.side), MathUtils.clamp(((1 - v.y) / 2) * height, LABELS.top, height - LABELS.bottom)]
+  }
+  const besideCursor = (el, cam, { width, height }) => [
+    MathUtils.clamp(((pointer.x + 1) / 2) * width, LABELS.side, width - LABELS.side),
+    MathUtils.clamp(((1 - pointer.y) / 2) * height + LABELS.below, LABELS.top, height - LABELS.bottom),
+  ]
+  const atBottom = (el, cam, { width, height }) => [width / 2, height - LABELS.hint]
+
   return (
     <>
       <primitive
@@ -1485,32 +1856,36 @@ export default function Apartment({ reducedMotion = false, day }) {
         onPointerMove={onPointerMove}
         onPointerLeave={onPointerLeave}
         onClick={onClick}
-        onPointerMissed={() => state.current.inspect && inspect(null)}
+        onPointerMissed={() => state.current.inspect && back()}
       />
       {bubble && (
         <group ref={anchor}>
-          {/* Dans le calque fixe de la scène, pas dans le conteneur qui défile */}
-          <Html center portal={{ current: gl.domElement.parentNode }} zIndexRange={[35, 0]} style={{ pointerEvents: "none" }}>
+          {/* Dans le calque fixe de la scène, pas dans le conteneur qui défile ; toujours dans l'écran */}
+          <Html center calculatePosition={keepOnScreen} portal={{ current: gl.domElement.parentNode }} zIndexRange={[35, 0]} style={{ pointerEvents: "none" }}>
             <div className="bubble" role="status">
-              {ui.phrases[ROOMS[bubble.room]]}
+              {bubble.text ? (bubble.muted ? `${bubble.text} · ${ui.lines.muted}` : bubble.text) : bubble.line ? ui.lines[bubble.line] : ui.phrases[ROOMS[bubble.room]]}
             </div>
           </Html>
         </group>
       )}
       {inspecting && (
-        <group ref={hintAnchor}>
-          <Html center portal={{ current: gl.domElement.parentNode }} zIndexRange={[33, 0]} style={{ pointerEvents: "none" }}>
-            <div className="hover-label inspect-hint">{state.current.shown?.link ? ui.openHint : ui.inspectHint}</div>
-          </Html>
-        </group>
+        <Html center calculatePosition={atBottom} portal={{ current: gl.domElement.parentNode }} zIndexRange={[33, 0]} style={{ pointerEvents: "none" }}>
+          <div className="hover-label inspect-hint">{ui[state.current.shown?.hint] ?? (state.current.shown?.link ? ui.openHint : ui.inspectHint)}</div>
+        </Html>
       )}
-      {label && !inspecting && (
-        <group ref={labelAnchor}>
-          <Html center portal={{ current: gl.domElement.parentNode }} zIndexRange={[34, 0]} style={{ pointerEvents: "none" }}>
-            <div className="hover-label">{ui.labels[label.text] ?? ui.objects[label.text] ?? label.text}</div>
+      {/* Le nom de ce qu'on survole, sous le curseur : il ne cache ni l'objet ni ses voisins.
+          Pas celui du groupe où l'on est déjà, ni celui de l'objet qui parle déjà dans sa bulle. */}
+      {label &&
+        (!inspecting || state.current.inspect?.type === "zone") &&
+        label.action !== state.current.inspect &&
+        !(bubble?.object && [].concat(label.object).includes(bubble.object)) && (
+          <Html center calculatePosition={besideCursor} portal={{ current: gl.domElement.parentNode }} zIndexRange={[34, 0]} style={{ pointerEvents: "none" }}>
+            <div className="hover-label">
+              {ui.labels[label.text] ?? ui.objects[label.text] ?? label.text}
+              {label.tip && <small>{ui[label.tip]}</small>}
+            </div>
           </Html>
-        </group>
-      )}
+        )}
     </>
   )
 }

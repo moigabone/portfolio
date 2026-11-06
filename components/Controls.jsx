@@ -106,6 +106,7 @@ export function Discoveries() {
   const [keys, setKeys] = useState([])
   const [found, setFound] = useState(() => new Set())
   const [fresh, setFresh] = useState(false) // un petit éclat à chaque nouvelle trouvaille
+  const wasDone = useRef(null) // tout était-il déjà trouvé ? (null : on ne sait pas encore)
   const { ui } = useContent()
 
   useEffect(() => {
@@ -134,9 +135,17 @@ export function Discoveries() {
     return () => clearTimeout(timer)
   }, [fresh])
 
-  if (!keys.length) return null
   const count = keys.filter((k) => found.has(k)).length
-  const done = count === keys.length
+  const done = keys.length > 0 && count === keys.length
+  // Tout est trouvé : la scène fête ça (`fresh` : à l'instant, et pas déjà au chargement de la page)
+  useEffect(() => {
+    if (!done) return
+    window.dispatchEvent(new CustomEvent("portfolio:complete", { detail: { fresh: !wasDone.current } }))
+  }, [done])
+  useEffect(() => {
+    if (keys.length) wasDone.current = done
+  })
+  if (!keys.length) return null
   const text = done ? ui.allFound : ui.found(count, keys.length)
   return (
     <div
