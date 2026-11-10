@@ -133,7 +133,7 @@ export const contact = {
 export const ui = {
   lang: "en",
   scene: "My portfolio is a three-storey 3D building: my bedroom (side projects), a classroom (education) and an office (apprenticeship). Each floor's text appears as you scroll. On the keyboard, keys 0, 1, 2 and C take you to a floor, H back home.",
-  hint: "Tip: click on me and on the objects in the rooms.",
+  hint: "Tip: click on me and on the objects in the rooms. References are hidden everywhere: the counter at the top right explains the hunt.",
   nextProjects: "Next projects",
   likes: "What I enjoy",
   skills: "Skills",
@@ -147,6 +147,12 @@ export const ui = {
   language: "Voir le site en français",
   found: (count, total) => `${count} of ${total} references found: films, manga, series… hidden in the rooms`,
   allFound: "You found everything, well done!",
+  // The challenge rules, under the counter
+  challenge: {
+    title: "The reference hunt",
+    rules: (total) =>
+      `${total} nods to my favourite films, manga, series and games are hidden in the three rooms. Zoom into a room and click whatever catches your eye: each reference you find moves the counter forward. Found them all? Lego has a surprise for you.`,
+  },
   inspectHint: "Click or Esc to go back",
   openHint: "Click to open the site · Esc to go back",
   playHint: "Space or click to jump · Esc to go back",

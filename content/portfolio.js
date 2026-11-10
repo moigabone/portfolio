@@ -144,7 +144,7 @@ export const site = {
 export const ui = {
   lang: "fr",
   scene: "Mon portfolio est un immeuble en 3D de trois étages : ma chambre (projets perso), une salle de classe (formation) et un bureau (alternance). Le texte de chaque étage s'affiche en faisant défiler la page. Au clavier, les touches 0, 1, 2 et C mènent aux étages, H à l'accueil.",
-  hint: "Astuce : clique sur moi et sur les objets des pièces.",
+  hint: "Astuce : clique sur moi et sur les objets des pièces. Des références sont cachées partout : le compteur en haut à droite explique le défi.",
   nextProjects: "Prochains projets",
   likes: "Ce que j'aime",
   skills: "Compétences",
@@ -158,6 +158,12 @@ export const ui = {
   language: "View the site in English",
   found: (count, total) => `${count} références trouvées sur ${total} : films, mangas, séries… cachés dans les pièces`,
   allFound: "Tu as tout trouvé, bravo !",
+  // La consigne du défi, sous le compteur
+  challenge: {
+    title: "Le défi des références",
+    rules: (total) =>
+      `${total} clins d'œil à mes films, mangas, séries et jeux préférés sont cachés dans les trois pièces. Zoome dans une pièce et clique sur les objets qui t'intriguent : chaque référence trouvée fait avancer le compteur. Tout trouvé ? Lego a une surprise pour toi.`,
+  },
   inspectHint: "Clic ou Échap pour revenir",
   openHint: "Clic pour ouvrir le site · Échap pour revenir",
   playHint: "Espace ou clic pour sauter · Échap pour revenir",

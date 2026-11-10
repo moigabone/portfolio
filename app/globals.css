@@ -131,6 +131,36 @@ html[data-theme="day"] body::after { display: none; }
   transform: translateX(-50%) rotate(45deg);
 }
 
+/* La consigne du défi des références, sous le compteur (voir Discoveries) */
+.challenge {
+  position: fixed; /* sous la rangée de boutons, collée au bord droit : le compteur n'est pas au bout de la rangée */
+  top: 3.75rem;
+  right: 1rem;
+  z-index: 50;
+  width: min(20rem, calc(100vw - 2rem));
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--color-seam);
+  background: rgb(10 9 38 / 0.96);
+  color: var(--color-ink);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.challenge p {
+  margin: 0;
+}
+.challenge p + p {
+  margin-top: 0.6rem;
+}
+.challenge-title {
+  color: var(--color-gilt);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+.challenge-score {
+  color: var(--color-ash);
+  font-size: 0.8rem;
+}
+
 /* Étiquette au survol des objets cliquables : sous le curseur (voir Apartment) */
 .hover-label {
   padding: 0.3rem 0.6rem;

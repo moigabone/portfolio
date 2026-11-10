@@ -106,6 +106,8 @@ export function Discoveries() {
   const [keys, setKeys] = useState([])
   const [found, setFound] = useState(() => new Set())
   const [fresh, setFresh] = useState(false) // un petit éclat à chaque nouvelle trouvaille
+  const [open, setOpen] = useState(false) // la consigne du défi, sous le compteur
+  const box = useRef(null)
   const wasDone = useRef(null) // tout était-il déjà trouvé ? (null : on ne sait pas encore)
   const { ui } = useContent()
 
@@ -145,24 +147,48 @@ export function Discoveries() {
   useEffect(() => {
     if (keys.length) wasDone.current = done
   })
+  // La consigne se ferme d'un clic ailleurs ou avec Échap
+  useEffect(() => {
+    if (!open) return
+    const outside = (e) => box.current && !box.current.contains(e.target) && setOpen(false)
+    const escape = (e) => e.key === "Escape" && setOpen(false)
+    document.addEventListener("pointerdown", outside)
+    document.addEventListener("keydown", escape)
+    return () => {
+      document.removeEventListener("pointerdown", outside)
+      document.removeEventListener("keydown", escape)
+    }
+  }, [open])
   if (!keys.length) return null
   const text = done ? ui.allFound : ui.found(count, keys.length)
   return (
-    <div
-      role="status"
-      aria-label={text}
-      title={text}
-      className={`flex h-9 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold tabular-nums backdrop-blur transition ${
-        done ? "border-gilt bg-panel text-gilt shadow-[0_0_14px_rgb(255_211_106/0.5)]" : "border-seam bg-panel text-ash"
-      } ${fresh ? "scale-110 border-gilt text-gilt" : ""}`}
-    >
-      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-        <circle cx="11" cy="11" r="6" />
-        <path d="m20 20-4.5-4.5" />
-      </svg>
-      <span>
-        {count} / {keys.length}
-      </span>
+    <div ref={box} className="relative" data-card>
+      <button
+        type="button"
+        aria-label={text}
+        aria-expanded={open}
+        aria-controls="challenge"
+        title={text}
+        onClick={() => setOpen((o) => !o)}
+        className={`flex h-9 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold tabular-nums backdrop-blur transition ${
+          done ? "border-gilt bg-panel text-gilt shadow-[0_0_14px_rgb(255_211_106/0.5)]" : "border-seam bg-panel text-ash hover:text-ink"
+        } ${fresh ? "scale-110 border-gilt text-gilt" : ""}`}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <circle cx="11" cy="11" r="6" />
+          <path d="m20 20-4.5-4.5" />
+        </svg>
+        <span>
+          {count} / {keys.length}
+        </span>
+      </button>
+      {open && (
+        <div id="challenge" role="dialog" aria-label={ui.challenge.title} className="challenge">
+          <p className="challenge-title">{ui.challenge.title}</p>
+          <p>{ui.challenge.rules(keys.length)}</p>
+          <p className="challenge-score">{text}</p>
+        </div>
+      )}
     </div>
   )
 }
