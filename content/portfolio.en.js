@@ -145,7 +145,7 @@ export const ui = {
   soundOn: "Turn on ambient sound",
   soundOff: "Mute",
   language: "Voir le site en français",
-  found: (count, total) => `${count} of ${total} objects found: click whatever catches your eye`,
+  found: (count, total) => `${count} of ${total} references found: films, manga, series… hidden in the rooms`,
   allFound: "You found everything, well done!",
   inspectHint: "Click or Esc to go back",
   openHint: "Click to open the site · Esc to go back",

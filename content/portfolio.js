@@ -156,7 +156,7 @@ export const ui = {
   soundOn: "Activer l'ambiance sonore",
   soundOff: "Couper le son",
   language: "View the site in English",
-  found: (count, total) => `${count} objets découverts sur ${total} : clique sur ce qui t'intrigue`,
+  found: (count, total) => `${count} références trouvées sur ${total} : films, mangas, séries… cachés dans les pièces`,
   allFound: "Tu as tout trouvé, bravo !",
   inspectHint: "Clic ou Échap pour revenir",
   openHint: "Clic pour ouvrir le site · Échap pour revenir",

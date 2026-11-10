@@ -470,6 +470,12 @@ function seatPerson(room, m, bonus = 1) {
 
 // Repère d'un objet plat accroché au mur (tableau, fenêtre) : son centre, la normale vers la pièce, sa largeur et sa hauteur
 // Le nom sous lequel un objet cliquable compte dans les découvertes ; le compteur l'apprend par un évènement
+// Le défi des références : seuls ces objets comptent dans le compteur (les écrans, le personnage, les meubles
+// restent cliquables, mais ils ont un autre rôle)
+const REFERENCES = new Set([
+  "Une marque étrange", "Un anneau", "Une boîte", "La gamelle de Lego", "Mon téléphone", "Un savon", "Un holocron",
+  "Le tiroir", "Un verre d'eau", "La boule de cristal", "Kevin", "Un post-it", "Le modèle OSI", "Ma PS Vita",
+])
 const discoveryKey = (action) => (action.type === "person" ? `person-${action.room}` : (action.label ?? action.type))
 const announce = (name, detail) => window.dispatchEvent(new CustomEvent(`portfolio:${name}`, { detail }))
 
@@ -1584,10 +1590,10 @@ export default function Apartment({ reducedMotion = false, day }) {
     window.addEventListener("portfolio:complete", onComplete)
     return () => window.removeEventListener("portfolio:complete", onComplete)
   })
-  // Le compteur d'objets découverts : chaque objet cliquable compte une fois (voir Discoveries)
+  // Le compteur des références : chacune compte une fois (voir REFERENCES et Discoveries)
   useEffect(() => {
     const keys = new Set()
-    scene.traverse((o) => o.userData.action && o.userData.action.type !== "zone" && keys.add(discoveryKey(o.userData.action)))
+    scene.traverse((o) => o.userData.action && REFERENCES.has(o.userData.action.label) && keys.add(discoveryKey(o.userData.action)))
     announce("discoverable", [...keys])
   }, [scene])
   // Seul ce qui est permis réagit (voir allowed)
@@ -1609,7 +1615,7 @@ export default function Apartment({ reducedMotion = false, day }) {
       s.zone = action
       return inspect(action)
     }
-    announce("discover", discoveryKey(action))
+    if (REFERENCES.has(action.label)) announce("discover", discoveryKey(action))
     const now = clock.elapsedTime
     if (action.type === "inspect") {
       inspect(action)
